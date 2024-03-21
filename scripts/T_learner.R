@@ -103,8 +103,52 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
     analysis_data <- subset(analysis_data,analysis_data$G==1) 
   }
 
-  output <- analysis_data
-
+  
+  
+  #------------------------------#
+  #--- Running outcome models ---#
+  #------------------------------#
+  
+  if (nuisance_estimates_input == 0){
+    outcome_models <- out_mods(data = analysis_data,
+                               id = id,
+                               outcome = outcome,
+                               exposure = exposure,
+                               out_method = out_method,   
+                               out_covariates = out_covariates,
+                               out_SL_lib = out_SL_lib,
+                               out_SL_strat = out_SL_strat,
+                               Y_bin = clean_data$Y_bin,
+                               Y_cont = clean_data$Y_cont,
+                               nuisance_estimates_input = nuisance_estimates_input,
+                               o_0_pred = o_0_pred,
+                               o_1_pred = o_1_pred,
+                               pred_data = newdata)
+  }
+  
+  
+  #-------------------------------#
+  #--- Creating CATE estimates ---#
+  #-------------------------------#
+  if (nuisance_estimates_input == 0){
+    newdata$CATE_est <- outcome_models$o_mod_pred_1 - outcome_models$o_mod_pred_0
+  }
+  else if (nuisance_estimates_input == 1){
+    analysis_data$CATE_est <- analysis_data[["o_1_pred"]] - analysis_data[["o_0_pred"]]
+  }
+  
+  #-----------------------------#
+  #--- Returning information ---#
+  #-----------------------------#
+  if (nuisance_estimates_input == 0){
+    output <- list(CATE_est=newdata$CATE_est,
+                   outcome_models=outcome_models,
+                   newdata=newdata)
+  }
+  else {
+    output <- list(CATE_est=analysis_data$CATE_est,
+                   newdata=analysis_data)
+  }
   return(output)
 }
 
@@ -112,31 +156,32 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
 
 ###############################################################
 
-#Example 
-T_check <- T_learner(analysis = "SL imputation",
-                     data = check,
-                     id = "ID",
-                     outcome = "Y",
-                     exposure = "A",
-                     outcome_observed_indicator = "G_obs",
-                     out_method = "Parametric",
-                     out_covariates = c("X1","X2","X3"),
-                     imp_covariates = c("X3","X5","X6"),
-                     imp_SL_lib = c("SL.lm"),
-                     imp_SL_strat = FALSE,
-                     newdata = check)
-
-T_check <- T_learner(analysis = "SL imputation",
-                     data = check,
-                     id = "ID",
-                     outcome = "Y",
-                     exposure = "A",
-                     outcome_observed_indicator = "G_obs",
-                     nuisance_estimates_input = 1,
-                     o_0_pred = "Y.0_prob_true",
-                     o_1_pred = "Y.1_prob_true",
-                     newdata = check)
-
+# #Example 
+# T_check <- T_learner(analysis = "SL imputation",
+#                      data = check,
+#                      id = "ID",
+#                      outcome = "Y",
+#                      exposure = "A",
+#                      outcome_observed_indicator = "G_obs",
+#                      out_method = "Super learner",
+#                      out_covariates = c("X1","X2","X3"),
+#                      out_SL_lib = c("SL.lm"),
+#                      out_SL_strat = FALSE,
+#                      imp_covariates = c("X3","X5","X6"),
+#                      imp_SL_lib = c("SL.lm"),
+#                      imp_SL_strat = FALSE,
+#                      newdata = check)
+# 
+# T_check <- T_learner(analysis = "Complete case",
+#                      data = check,
+#                      id = "ID",
+#                      outcome = "Y",
+#                      exposure = "A",
+#                      outcome_observed_indicator = "G_obs",
+#                      nuisance_estimates_input = 1,
+#                      o_0_pred = "Y.0_prob_true",
+#                      o_1_pred = "Y.1_prob_true",
+#                      newdata = check)
 
 
 ############################
