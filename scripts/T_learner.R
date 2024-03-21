@@ -45,7 +45,7 @@ library(mice)
 #' @return A dataset containing n CATE estimates (UPDATE) 
 
 
-T_learner <- function(analysis = c("Complete case","mean imputation","SL imputation","SL imputation error"),
+T_learner <- function(analysis = c("Complete case","SL imputation"),
                       data,
                       id,
                       outcome,
@@ -84,7 +84,26 @@ T_learner <- function(analysis = c("Complete case","mean imputation","SL imputat
   )
   
   
-  output <- clean_data
+  #-------------------------#
+  #--- Imputing outcomes ---#
+  #-------------------------#
+  if (analysis == "SL imputation" & nuisance_estimates_input == 0){
+    analysis_data <- out_imp_1tp(data = clean_data$data,
+                                 id = id,
+                                 outcome = outcome,
+                                 exposure = exposure,
+                                 imp_covariates = imp_covariates,
+                                 imp_SL_lib = imp_SL_lib,
+                                 imp_SL_strat = FALSE,
+                                 Y_bin = clean_data$Y_bin,
+                                 Y_cont = clean_data$Y_cont)
+  }
+  else {
+    analysis_data <- clean_data$data
+    analysis_data <- subset(analysis_data,analysis_data$G==1) 
+  }
+
+  output <- analysis_data
 
   return(output)
 }
@@ -103,9 +122,11 @@ T_check <- T_learner(analysis = "SL imputation",
                      out_method = "Parametric",
                      out_covariates = c("X1","X2","X3"),
                      imp_covariates = c("X3","X5","X6"),
+                     imp_SL_lib = c("SL.lm"),
+                     imp_SL_strat = FALSE,
                      newdata = check)
 
-T_check <- T_learner(analysis = "Complete case",
+T_check <- T_learner(analysis = "SL imputation",
                      data = check,
                      id = "ID",
                      outcome = "Y",
@@ -115,6 +136,21 @@ T_check <- T_learner(analysis = "Complete case",
                      o_0_pred = "Y.0_prob_true",
                      o_1_pred = "Y.1_prob_true",
                      newdata = check)
+
+
+
+############################
+
+#Notes on use:
+#   - If want to fit outcome imputation outside function then run Complete case 
+#     and specify outcome as imputed outcome 
+#   - Won't run imputation if nuisance estimates are input and not estimated,
+#     instead treats it as a complete case analysis
+#   - If nuisance functions input, T-learner can only make predictions of input data 
+
+
+
+
 
 
 
