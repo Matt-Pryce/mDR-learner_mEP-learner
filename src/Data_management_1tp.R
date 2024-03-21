@@ -104,8 +104,10 @@ data_manage_1tp <- function(data,
           vars <- append(vars,g_covariates)
           vars <- append(vars,pse_covariates)
         }
-        if (analysis_type == "SL imputation"){   #If want to impute youself then set as outcome and run complete case 
-          vars <- append(vars,imp_covariates)
+        if (learner != "mDR-learner"){
+          if (analysis_type == "SL imputation"){   
+            vars <- append(vars,imp_covariates)
+          }
         }
         vars <- vars[!duplicated(vars)]
       }
@@ -114,11 +116,11 @@ data_manage_1tp <- function(data,
         vars <- append(vars,o_0_pred)
         vars <- append(vars,o_1_pred)
         
-        if (learner == "DR-learner"){           #Cant run  imputation if imputing nuisance estimates (do as above)
+        if (learner == "DR-learner"){         
           vars <- append(vars,pse_covariates)
           vars <- append(vars,e_pred)
         }
-        if (learner == "mDR-learner"){           #Cant run  imputation if imputing nuisance estimates (do as above)
+        if (learner == "mDR-learner"){        
           vars <- append(vars,pse_covariates)
           vars <- append(vars,e_pred)
           vars <- append(vars,g_pred)
@@ -153,7 +155,7 @@ data_manage_1tp <- function(data,
         }
         if (learner == "mDR-learner"){
           names(data)[names(data) == e_pred] <- "e_pred"
-          names(data)[names(data) == g_pred] <- "e_pred"
+          names(data)[names(data) == g_pred] <- "g_pred"
         }
       }
     },
@@ -165,19 +167,20 @@ data_manage_1tp <- function(data,
   
   
   #-----------------------#
-  #--- Format new data ---#   #If running t-learner can only make predictions of input data 
+  #--- Format new data ---#   
   #-----------------------#
   tryCatch( 
     {
       if (nuisance_estimates_input == 0 & learner == "T-learner"){
         new_data_vars <- c(id,out_covariates)
-
+        newdata <- subset(newdata,select=new_data_vars)
+        names(newdata)[names(newdata) == id] <- "ID"
       }
       if (learner != "T-learner"){
         new_data_vars <- c(id,pse_covariates)
+        newdata <- subset(newdata,select=new_data_vars)
+        names(newdata)[names(newdata) == id] <- "ID"
       }
-      newdata <- subset(newdata,select=new_data_vars)
-      names(newdata)[names(newdata) == id] <- "ID"
     },
     error=function(e) {
       stop('An error occured when formatting the new data')
