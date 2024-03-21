@@ -104,7 +104,7 @@ data_manage_1tp <- function(data,
           vars <- append(vars,g_covariates)
           vars <- append(vars,pse_covariates)
         }
-        if (analysis == "SL imputation"){   #If want to impute youself then set as outcome and run complete case 
+        if (analysis_type == "SL imputation"){   #If want to impute youself then set as outcome and run complete case 
           vars <- append(vars,imp_covariates)
         }
         vars <- vars[!duplicated(vars)]
@@ -165,18 +165,19 @@ data_manage_1tp <- function(data,
   
   
   #-----------------------#
-  #--- Format new data ---#
+  #--- Format new data ---#   #If running t-learner can only make predictions of input data 
   #-----------------------#
   tryCatch( 
     {
-      if (learner == "T-learner"){
+      if (nuisance_estimates_input == 0 & learner == "T-learner"){
         new_data_vars <- c(id,out_covariates)
+
       }
-      else {
-        new_data_vars <- c(id,out_covariates)
+      if (learner != "T-learner"){
+        new_data_vars <- c(id,pse_covariates)
       }
-      new_data <- subset(newdata,select=new_data_vars)
-      names(new_data)[names(new_data) == id] <- "ID"
+      newdata <- subset(newdata,select=new_data_vars)
+      names(newdata)[names(newdata) == id] <- "ID"
     },
     error=function(e) {
       stop('An error occured when formatting the new data')
@@ -213,7 +214,8 @@ data_manage_1tp <- function(data,
   #-----------------------------#
   output <- list(data=data,
                  Y_bin = Y_bin,
-                 Y_cont = Y_cont)
+                 Y_cont = Y_cont,
+                 newdata=newdata)
   return(output)
 }
   
