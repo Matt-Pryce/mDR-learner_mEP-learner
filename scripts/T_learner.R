@@ -184,19 +184,6 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
 #                      newdata = check)
 
 
-############################
-
-#Notes on use:
-#   - If want to fit outcome imputation outside function then run Complete case 
-#     and specify outcome as imputed outcome 
-#   - Won't run imputation if nuisance estimates are input and not estimated,
-#     instead treats it as a complete case analysis
-#   - If nuisance functions input, T-learner can only make predictions of input data 
-
-
-
-
-
 
 
 
