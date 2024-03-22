@@ -24,7 +24,7 @@ library(mice)
 #--- For single time point setting ---#
 #######################################
 
-#' @param analysis Type of analysis to be run (e.g. complete case or outcome imputation) 
+#' @param analysis Type of analysis to be run (Complete case or outcome imputation) 
 #' @param data The data frame containing all required information
 #' @param id Identification for individuals
 #' @param outcome The name of the outcome of interest
@@ -33,16 +33,16 @@ library(mice)
 #' @param out_method Statistical technique used to run the outcome models
 #' @param out_covariates  List containing the names of the variables to be input into each outcome model
 #' @param out_SL_lib Library to be used in super learner if selected
-#' @param out_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies outcomes - binary only)
-#' @param oracle If an oracle version of the T-learner is to be run
-#' @param Y.0 If oracle=1, Y.0 value to be used in oracle model
-#' @param Y.1 If oracle=1, Y.1 value to be used in oracle model
+#' @param out_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies outcomes - Only use if outcome binary)
 #' @param imp_covariates Covariates to be used in SL imputation model if SL imputation used
 #' @param imp_SL_lib SL libaray for imputation model if SL imputation used
 #' @param imp_SL_strat Whether SL CV folds are stratified in the imputation model if SL imputation used  
+#' @param nuisance_estimates_input Indicator for whether nuisance estimates provided
+#' @param o_0_pred Variable name for unexposed outcome predictions (if provided)
+#' @param o_1_pred Variable name for exposed outcome predictions (if provided)
 #' @param newdata New data to create predictions for
 
-#' @return A dataset containing n CATE estimates (UPDATE) 
+#' @return A list containing: CATE estimates, a dataset used to train the learner, outcome models (if run) 
 
 
 T_learner <- function(analysis = c("Complete case","SL imputation"),
