@@ -49,7 +49,6 @@ Pseudo_mod <- function(data,
                        pse_method = c("Parametric","Random forest","Super Learner"),
                        pse_covariates,
                        pse_SL_lib,
-                       pse_SL_strat = TRUE,
                        nuisance_estimates_input = 0,
                        pred_data
 ){
