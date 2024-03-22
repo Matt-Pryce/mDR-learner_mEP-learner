@@ -20,24 +20,15 @@ library(data.table)
 library(SuperLearner)
 library(mice)
 
-
-#' @param analysis Type of analysis to be run (e.g. complete case or outcome imputation) 
 #' @param data The data frame containing all required information
 #' @param id Identification for individuals
 #' @param outcome The name of the outcome of interest
 #' @param exposure The name of the exposure of interest
-#' @param outcome_observed_indicator Indicator identifying when the outcome variable is observed (1=observed, 0=missing)
-#' @param out_method Statistical technique used to run the outcome models
-#' @param out_covariates  List containing the names of the variables to be input into each outcome model
-#' @param out_SL_lib Library to be used in super learner if selected
-#' @param out_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies outcomes - binary only)
-#' @param oracle If an oracle version of the T-learner is to be run
-#' @param Y.0 If oracle=1, Y.0 value to be used in oracle model
-#' @param Y.1 If oracle=1, Y.1 value to be used in oracle model
 #' @param imp_covariates Covariates to be used in SL imputation model if SL imputation used
 #' @param imp_SL_lib SL libaray for imputation model if SL imputation used
 #' @param imp_SL_strat Whether SL CV folds are stratified in the imputation model if SL imputation used  
-#' @param newdata New data to create predictions for
+#' @param Y_bin Indicator for hether outcome is binary
+#' @param Y_cont Indicator for hether outcome is continuous 
 
 #' @return A dataset containing n CATE estimates (UPDATE) 
 
