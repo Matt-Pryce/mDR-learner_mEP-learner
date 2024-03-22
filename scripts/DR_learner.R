@@ -24,25 +24,35 @@ library(mice)
 #--- For single time point setting ---#
 #######################################
 
-#' @param analysis Type of analysis to be run (e.g. complete case or outcome imputation) 
+#' @param analysis Type of analysis to be run (Complete case or outcome imputation) 
 #' @param data The data frame containing all required information
 #' @param id Identification for individuals
 #' @param outcome The name of the outcome of interest
 #' @param exposure The name of the exposure of interest
 #' @param outcome_observed_indicator Indicator identifying when the outcome variable is observed (1=observed, 0=missing)
+#' @param splits Number of splitsu for cross-fitting (Variations allowed: 1, 3, 10)
 #' @param out_method Statistical technique used to run the outcome models
 #' @param out_covariates  List containing the names of the variables to be input into each outcome model
 #' @param out_SL_lib Library to be used in super learner if selected
-#' @param out_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies outcomes - binary only)
-#' @param oracle If an oracle version of the T-learner is to be run
-#' @param Y.0 If oracle=1, Y.0 value to be used in oracle model
-#' @param Y.1 If oracle=1, Y.1 value to be used in oracle model
+#' @param out_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies outcomes - Only use if outcome binary)
+#' @param e_method Statistical technique used to run the propensity score model
+#' @param e_covariates  List containing the names of the variables to be input into the propensity score model
+#' @param e_SL_lib Library to be used in super learner if selected
+#' @param e_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies individuals based on exposure)
+#' @param nuisance_estimates_input Indicator for whether nuisance estimates provided
+#' @param o_0_pred Variable name for unexposed outcome predictions (if provided)
+#' @param o_1_pred Variable name for exposed outcome predictions (if provided)
+#' @param e_pred Variable name for propensity score predictions (if provided)
+#' @param pse_method Statistical technique used to run the pseudo outcome model
+#' @param pse_covariates List containing the names of the variables to be input into the pseudo outcome model
+#' @param pse_SL_lib Library to be used in super learner if selected for pseudo outcome model
 #' @param imp_covariates Covariates to be used in SL imputation model if SL imputation used
 #' @param imp_SL_lib SL libaray for imputation model if SL imputation used
-#' @param imp_SL_strat Whether SL CV folds are stratified in the imputation model if SL imputation used  
+#' @param imp_SL_strat Whether SL CV folds are stratified in the imputation model if SL imputation used 
 #' @param newdata New data to create predictions for
 
-#' @return A dataset containing n CATE estimates (UPDATE) 
+#' @return A list containing: CATE estimates, a dataset used to train the learner, dataset containing all 
+#'         pseudo-outcome predictions (if splits 3) 
 
 
 DR_learner <- function(analysis = c("Complete case","Available case","SL imputation"),
@@ -161,7 +171,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
           if (splits == 3){
             o_data <- subset(o_data,o_data$s == ((i+1) %% 3))
           }
-          else if (splits == 1 | splits == 2){
+          else if (splits == 1){
             o_data <- subset(o_data,o_data$s == i)
           }
           else if (splits == 10){
@@ -226,7 +236,6 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
                                      out_SL_strat = out_SL_strat,
                                      Y_bin = clean_data$Y_bin,
                                      Y_cont = clean_data$Y_cont,
-                                     nuisance_estimates_input = nuisance_estimates_input,
                                      o_0_pred = o_0_pred,
                                      o_1_pred = o_1_pred,
                                      pred_data = po_o_data)
@@ -249,7 +258,6 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
                              e_covariates = e_covariates,
                              e_SL_lib = e_SL_lib,
                              e_SL_strat = e_SL_strat,
-                             nuisance_estimates_input = nuisance_estimates_input,
                              e_pred = e_pred,
                              pred_data = po_e_data
           )
@@ -372,13 +380,6 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
     )
   }
 
-  if (nuisance_estimates_input == 1){
-    #Add splits to run pseudo-outcome model
-
-  }
-
-
-
   #-----------------------------#
   #--- Returning information ---#
   #-----------------------------#
@@ -387,8 +388,6 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
                    data = po_data_all)
   }
   else if (splits == 3){
-    #Make cate est
-
     #Calculating average CATE estimate
     po_preds <- as.data.frame(rep(0,dim(newdata)[1]))
     for (i in 1:splits){
@@ -410,46 +409,43 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
 
 ###############################################################
 
-#Example 
-DR_check <- DR_learner(analysis = "SL imputation",
-                       data = check,
-                       id = "ID",
-                       outcome = "Y",
-                       exposure = "A",
-                       outcome_observed_indicator = "G_obs",
-                       splits = 3,
-                       e_covariates = c("X1","X2","X3"),
-                       e_method = "Parametric",
-                       e_SL_lib = c("SL.lm"),
-                       e_SL_strat = TRUE,
-                       out_method = "Parametric",
-                       out_covariates = c("X1","X2","X3"),
-                       out_SL_lib = c("SL.lm"),
-                       out_SL_strat = FALSE,
-                       pse_method = "Parametric",
-                       pse_covariates = c("X1"),
-                       pse_SL_lib = c("SL.lm"),
-                       imp_covariates = c("X3","X5","X6"),
-                       imp_SL_lib = c("SL.lm"),
-                       imp_SL_strat = FALSE,
-                       newdata = check)
-
-DR_check <- DR_learner(analysis = "Complete case",
-                       data = check,
-                       id = "ID",
-                       outcome = "Y",
-                       exposure = "A",
-                       outcome_observed_indicator = "G_obs",
-                       splits = 3,
-                       nuisance_estimates_input = 1,
-                       o_0_pred = "Y.0_prob_true",
-                       o_1_pred = "Y.1_prob_true",
-                       e_pred = "prop_score",
-                       pse_method = "Parametric",
-                       pse_covariates = c("X1"),
-                       pse_SL_lib = c("SL.lm"),
-                       newdata = check)
-
-#Known nuisance functions can only be input for 10 fold cross-fitting 
-
+# #Example 
+# DR_check <- DR_learner(analysis = "SL imputation",
+#                        data = check,
+#                        id = "ID",
+#                        outcome = "Y",
+#                        exposure = "A",
+#                        outcome_observed_indicator = "G_obs",
+#                        splits = 3,
+#                        e_covariates = c("X1","X2","X3"),
+#                        e_method = "Parametric",
+#                        e_SL_lib = c("SL.lm"),
+#                        e_SL_strat = TRUE,
+#                        out_method = "Parametric",
+#                        out_covariates = c("X1","X2","X3"),
+#                        out_SL_lib = c("SL.lm"),
+#                        out_SL_strat = FALSE,
+#                        pse_method = "Parametric",
+#                        pse_covariates = c("X1"),
+#                        pse_SL_lib = c("SL.lm"),
+#                        imp_covariates = c("X3","X5","X6"),
+#                        imp_SL_lib = c("SL.lm"),
+#                        imp_SL_strat = FALSE,
+#                        newdata = check)
+# 
+# DR_check <- DR_learner(analysis = "Complete case",
+#                        data = check,
+#                        id = "ID",
+#                        outcome = "Y",
+#                        exposure = "A",
+#                        outcome_observed_indicator = "G_obs",
+#                        splits = 3,
+#                        nuisance_estimates_input = 1,
+#                        o_0_pred = "Y.0_prob_true",
+#                        o_1_pred = "Y.1_prob_true",
+#                        e_pred = "prop_score",
+#                        pse_method = "Parametric",
+#                        pse_covariates = c("X1"),
+#                        pse_SL_lib = c("SL.lm"),
+#                        newdata = check)
 
