@@ -120,9 +120,9 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
   
   
   
-  #-----------------------------------------------------#
-  #--- Running nuisance models & pseudo outcome model---#
-  #-----------------------------------------------------#
+  #------------------------------------------------------#
+  #--- Running nuisance models & pseudo outcome model ---#
+  #------------------------------------------------------#
 
   tryCatch(
     {
@@ -141,18 +141,20 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
     }
   )
 
-  # Iterating over each split (cross-fitting)
+  #--- Iterating over each split (cross-fitting) ---#
   all_output <- list()
-  if (nuisance_estimates_input == 0){               
-    for (i in 0:(splits-1)){
-      
+  
+  for (i in 0:(splits-1)){
+    if (nuisance_estimates_input == 0){
       #--- Collecting data for training models ---#
       tryCatch(
         {
-          o_data <- analysis_data
+          #Data for propensity score model
           e_data <- analysis_data
           e_data <- subset(e_data,e_data$s == i)   #Same for all splits 
-          A_e <- e_data$A
+          
+          #Data for outcome models
+          o_data <- analysis_data
           if (analysis == "Available case"){
             o_data <- subset(o_data,o_data$G == 1)
           }
@@ -211,7 +213,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       
     
       #--- Running nuisance models & obtaining predictions ---#
-      #OUTCOME MODELS
+      #Outcome models
       tryCatch(
         {
           outcome_models <- out_mods(data = o_data,
@@ -236,7 +238,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
         }
       )
       
-      #PROPENSITY SCORE
+      #Propensity score model
       tryCatch(
         {
           PS_model <- PS_mod(data = o_data,
@@ -273,97 +275,135 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
         }
       )
 
+    }
+    else if (nuisance_estimates_input == 1){
+      
+      if (analysis == "Available case"){
+        analysis_data <- subset(analysis_data,analysis_data$G==1)
+      }
+      if (splits == 3){
+        po_data <- analysis_data
+        po_data <- subset(po_data,po_data$s == ((i+2) %% 3))
+      }
+      else if (splits == 1 | splits == 10){
+        po_data <- analysis_data
+        po_data <- subset(po_data,po_data$s == i)
+      }
+    }
+    
+    
+    #--- Calculating pseudo-outcomes ---#
+    tryCatch(
+      {
+        #First setting missing values to 99
+        po_data <- po_data %>% mutate_if(is.numeric, function(x) ifelse(is.na(x), 99, x))
+        
+        #Calculating pseudo outcome
+        po_data$pse_Y <- ((po_data$A - po_data$e_pred)/(po_data$e_pred*(1-po_data$e_pred))) *
+          (po_data$Y - (po_data$A*po_data$o_1_pred +(1-po_data$A)*po_data$o_0_pred)) +
+          po_data$o_1_pred - po_data$o_0_pred
+      },
+      #if an error occurs, tell me the error
+      error=function(e) {
+        stop(paste("An error occured when generating the pseudo outcome in split ",i,sep=""))
+        print(e)
+      }
+    )
+    
 
-      #--- Calculating pseudo-outcomes ---#
+    #--- Collecting full test data with pseudo-outcomes ---#
+    if (i==0){
+      po_data_all <- po_data
+    }
+    else {
+      po_data_all <- rbind(po_data_all,po_data)
+    }
+    
+    
+    #--- Running pseudo-outcome regression (if 3 split option chosen) ---#
+    if (splits == 3){
+      tryCatch(
+        {
+          pse_model <- Pseudo_mod(data = po_data,
+                                  id = id,
+                                  outcome = outcome,
+                                  exposure = exposure,
+                                  pse_method = pse_method,
+                                  pse_covariates = pse_covariates,
+                                  pse_SL_lib = pse_SL_lib,
+                                  nuisance_estimates_input = nuisance_estimates_input,
+                                  pred_data = newdata)
+        },
+        #if an error occurs, tell me the error
+        error=function(e) {
+          stop(paste("An error occured when fitting the pseudo outcome model in split ",i,sep=""))
+          print(e)
+        }
+      )
 
-
-      #--- Collecting full test data with pseudo-outcomes ---#
+      #--- Collecting pseudo-outcome regression models/preds ---#
       if (i==0){
-        po_data_all <- po_data
+        pse_mods <- list(pse_model)
       }
       else {
-        po_data_all <- rbind(po_data_all,po_data)
+        pse_mods <- append(pse_mods,list(pse_model))
       }
-      
     }
   }
   
-  if (nuisance_estimates_input == 1){
-    #Add splits to run pseudo-outcome model 
-    
+  if (splits == 1 | splits == 10){
+    tryCatch(
+      {
+        pse_model <- Pseudo_mod(data = po_data_all,
+                                id = id,
+                                outcome = outcome,
+                                exposure = exposure,
+                                pse_method = pse_method,
+                                pse_covariates = pse_covariates,
+                                pse_SL_lib = pse_SL_lib,
+                                nuisance_estimates_input = nuisance_estimates_input,
+                                pred_data = newdata)
+      },
+      #if an error occurs, tell me the error
+      error=function(e) {
+        stop(paste("An error occured when fitting the pseudo outcome model in split ",i,sep=""))
+        print(e)
+      }
+    )
   }
-          
-  #         #Running if random forest selected
-  #         if (out_method == "Random forest"){
-  #           out_X_0 <- as.matrix(subset(o_0_data, select = out_covariates))
-  #           out_mod_0 <- regression_forest(out_X_0, o_0_data$Y, honesty = FALSE,tune.parameters = "all")
-  #           
-  #           out_X_1 <- as.matrix(subset(o_1_data, select = out_covariates))
-  #           out_mod_1 <- regression_forest(out_X_1, o_1_data$Y, honesty = FALSE,tune.parameters = "all")
-  #         }
-  #         #Running if parametric model selected
-  #         else if (out_method == "Parametric"){
-  #           o_0_fit_data <- subset(o_0_data,select = -c(s,A,G))
-  #           o_1_fit_data <- subset(o_1_data,select = -c(s,A,G))
-  #           
-  #           if (Y_bin == 1){
-  #             #Running first outcome models
-  #             out_mod_0 <- glm(Y ~ . , data = o_0_fit_data, family = binomial())
-  #             out_mod_1 <- glm(Y ~ . , data = o_1_fit_data, family = binomial())
-  #           }
-  #           else {
-  #             #Running first outcome models
-  #             out_mod_0 <- lm(Y ~ . , data = o_0_fit_data)
-  #             out_mod_1 <- lm(Y ~ . , data = o_1_fit_data)
-  #           }
-  #         }
-  #         else if (out_method == "Super learner"){
-  #           if (Y_bin == 1){
-  #             Y0_sums <- table(o_0_data$Y)
-  #             cv_folds <- min(10,Y0_sums[1],Y0_sums[2])
-  #             out_mod_0 <- SuperLearner(Y = o_0_data$Y, X = data.frame(subset(o_0_data, select = out_covariates)),
-  #                                       method = "method.NNLS",
-  #                                       family = binomial(),
-  #                                       cvControl = list(V = cv_folds, stratifyCV=out_SL_strat),
-  #                                       SL.library = out_SL_lib)
-  #             Y1_sums <- table(o_1_data$Y)
-  #             cv_folds <- min(10,Y1_sums[1],Y1_sums[2])
-  #             out_mod_1 <- SuperLearner(Y = o_1_data$Y, X = data.frame(subset(o_1_data, select = out_covariates)),
-  #                                       method = "method.NNLS",
-  #                                       family = binomial(),
-  #                                       cvControl = list(V = cv_folds, stratifyCV=out_SL_strat),
-  #                                       SL.library = out_SL_lib)
-  #           }
-  #           else {
-  #             out_mod_0 <- SuperLearner(Y = o_0_data$Y, X = data.frame(subset(o_0_data, select = out_covariates)),
-  #                                       method = "method.NNLS",
-  #                                       family = gaussian(),
-  #                                       cvControl = list(V = 10, stratifyCV=out_SL_strat),
-  #                                       SL.library = out_SL_lib)
-  #             out_mod_1 <- SuperLearner(Y = o_1_data$Y, X = data.frame(subset(o_1_data, select = out_covariates)),
-  #                                       method = "method.NNLS",
-  #                                       family = gaussian(),
-  #                                       cvControl = list(V = 10, stratifyCV=out_SL_strat),
-  #                                       SL.library = out_SL_lib)
-  #           }
-  #         }
-  #         else {
-  #           stop("Method to generate outcome regression models not compatible")
-  #         }
-  #       },
-  #       #if an error occurs, tell me the error
-  #       error=function(e) {
-  #         stop(paste("An error occured when fitting the outcome models in split ",i,sep=""))
-  #         print(e)
-  #       }
-  #     )
-  #   }
-  # }
+
+  if (nuisance_estimates_input == 1){
+    #Add splits to run pseudo-outcome model
+
+  }
+
+
+
+  #-----------------------------#
+  #--- Returning information ---#
+  #-----------------------------#
+  if (splits == 1 | splits == 10){
+    output <- list(CATE_est = pse_model$po_pred,
+                   data = po_data_all)
+  }
+  else if (splits == 3){
+    #Make cate est
+
+    #Calculating average CATE estimate
+    po_preds <- as.data.frame(rep(0,dim(newdata)[1]))
+    for (i in 1:splits){
+      po_preds <- as.data.frame(cbind(po_preds,pse_mods[[i]]$po_pred))
+    }
+    po_preds <- po_preds[,2:dim(po_preds)[2]]
+
+    avg_CATE_est <- rowMeans(po_preds)
+
+    output <- list(CATE_est = avg_CATE_est,
+                   pse_preds = po_preds,
+                   data = po_data_all)
+  }
   
-  
-  output <- analysis_data
-  
-  return(po_data_all)
+  return(output)
 }
 
 
@@ -386,23 +426,28 @@ DR_check <- DR_learner(analysis = "SL imputation",
                        out_covariates = c("X1","X2","X3"),
                        out_SL_lib = c("SL.lm"),
                        out_SL_strat = FALSE,
+                       pse_method = "Parametric",
                        pse_covariates = c("X1"),
+                       pse_SL_lib = c("SL.lm"),
                        imp_covariates = c("X3","X5","X6"),
                        imp_SL_lib = c("SL.lm"),
                        imp_SL_strat = FALSE,
                        newdata = check)
 
-DR_check <- DR_learner(analysis = "SL imputation",
+DR_check <- DR_learner(analysis = "Complete case",
                        data = check,
                        id = "ID",
                        outcome = "Y",
                        exposure = "A",
                        outcome_observed_indicator = "G_obs",
+                       splits = 3,
                        nuisance_estimates_input = 1,
                        o_0_pred = "Y.0_prob_true",
                        o_1_pred = "Y.1_prob_true",
                        e_pred = "prop_score",
+                       pse_method = "Parametric",
                        pse_covariates = c("X1"),
+                       pse_SL_lib = c("SL.lm"),
                        newdata = check)
 
 #Known nuisance functions can only be input for 10 fold cross-fitting 
