@@ -302,9 +302,19 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
         {
           po_data <- cbind(po_data,o_1_pred = outcome_models$o_mod_pred_1)
           po_data <- cbind(po_data,o_0_pred = outcome_models$o_mod_pred_0)
-          po_data <- cbind(po_data,e_pred = PS_model$e_pred)
+          if (e_method == "Random forest"){
+            po_data <- cbind(po_data,e_pred = PS_model$e_pred$predictions)
+          }
+          else {
+            po_data <- cbind(po_data,e_pred = PS_model$e_pred)
+          }
           if (analysis == "mEP-learner"){
-            po_data <- cbind(po_data,g_pred = cen_model$g_pred)
+            if (g_method == "Random forest"){
+              po_data <- cbind(po_data,g_pred = cen_model$g_pred$predictions)
+            }
+            else {
+              po_data <- cbind(po_data,g_pred = cen_model$g_pred)
+            }
           }
         },
         #if an error occurs, tell me the error
