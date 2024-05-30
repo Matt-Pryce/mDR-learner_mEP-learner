@@ -34,11 +34,9 @@ library(mice)
 #' @param out_method Statistical technique used to run the outcome models
 #' @param out_covariates  List containing the names of the variables to be input into each outcome model
 #' @param out_SL_lib Library to be used in super learner if selected
-#' @param out_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies outcomes - Only use if outcome binary)
 #' @param e_method Statistical technique used to run the propensity score model
 #' @param e_covariates  List containing the names of the variables to be input into the propensity score model
 #' @param e_SL_lib Library to be used in super learner if selected
-#' @param e_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies individuals based on exposure)
 #' @param nuisance_estimates_input Indicator for whether nuisance estimates provided
 #' @param o_0_pred Variable name for unexposed outcome predictions (if provided)
 #' @param o_1_pred Variable name for exposed outcome predictions (if provided)
@@ -48,7 +46,6 @@ library(mice)
 #' @param pse_SL_lib Library to be used in super learner if selected for pseudo outcome model
 #' @param imp_covariates Covariates to be used in SL imputation model if SL imputation used
 #' @param imp_SL_lib SL libaray for imputation model if SL imputation used
-#' @param imp_SL_strat Whether SL CV folds are stratified in the imputation model if SL imputation used 
 #' @param newdata New data to create predictions for
 
 #' @return A list containing: CATE estimates, a dataset used to train the learner, dataset containing all 
@@ -65,11 +62,9 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
                        e_method = c("Parametric","Random forest","Super Learner"),
                        e_covariates,
                        e_SL_lib,
-                       e_SL_strat = TRUE,
                        out_method = c("Parametric","Random forest","Super Learner"),
                        out_covariates,
                        out_SL_lib,
-                       out_SL_strat = FALSE,
                        nuisance_estimates_input = 0,
                        e_pred = NA,
                        o_0_pred = NA,
@@ -79,7 +74,6 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
                        pse_SL_lib,
                        imp_covariates = c(),
                        imp_SL_lib,
-                       imp_SL_strat = FALSE,
                        newdata
 ){
   
@@ -110,15 +104,12 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
   #--- Imputing outcomes ---#
   #-------------------------#
   if (analysis == "SL imputation" & nuisance_estimates_input == 0){
-    analysis_data <- out_imp_1tp(data = clean_data$data,
-                                 id = id,
-                                 outcome = outcome,
-                                 exposure = exposure,
-                                 imp_covariates = imp_covariates,
-                                 imp_SL_lib = imp_SL_lib,
-                                 imp_SL_strat = FALSE,
-                                 Y_bin = clean_data$Y_bin,
-                                 Y_cont = clean_data$Y_cont)
+    analysis_data <- nuis_mod(model = "Imputation",
+                              data = clean_data$data,
+                              covariates = imp_covariates,
+                              SL_lib = imp_SL_lib,
+                              Y_bin = clean_data$Y_bin,
+                              Y_cont = clean_data$Y_cont)
   }
   if (analysis == "Complete case"){
     analysis_data <- clean_data$data
@@ -226,18 +217,13 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       #Outcome models
       tryCatch(
         {
-          outcome_models <- out_mods(data = o_data,
-                                     id = id,
-                                     outcome = outcome,
-                                     exposure = exposure,
-                                     out_method = out_method,
-                                     out_covariates = out_covariates,
-                                     out_SL_lib = out_SL_lib,
-                                     out_SL_strat = out_SL_strat,
+          outcome_models <- nuis_mod(model = "Outcome",
+                                     data = o_data,
+                                     method = out_method,
+                                     covariates = out_covariates,
+                                     SL_lib = out_SL_lib,
                                      Y_bin = clean_data$Y_bin,
                                      Y_cont = clean_data$Y_cont,
-                                     o_0_pred = o_0_pred,
-                                     o_1_pred = o_1_pred,
                                      pred_data = po_o_data)
         },
         #if an error occurs, tell me the error
@@ -250,17 +236,12 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       #Propensity score model
       tryCatch(
         {
-          PS_model <- PS_mod(data = o_data,
-                             id = id,
-                             outcome = outcome,
-                             exposure = exposure,
-                             e_method = e_method,
-                             e_covariates = e_covariates,
-                             e_SL_lib = e_SL_lib,
-                             e_SL_strat = e_SL_strat,
-                             e_pred = e_pred,
-                             pred_data = po_e_data
-          )
+          PS_model <- nuis_mod(model = "Propensity score",
+                                     data = e_data,
+                                     method = e_method,
+                                     covariates = e_covariates,
+                                     SL_lib = e_SL_lib,
+                                     pred_data = po_e_data)
         },
         #if an error occurs, tell me the error
         error=function(e) {
@@ -275,6 +256,9 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
           po_data <- cbind(po_data,o_1_pred = outcome_models$o_mod_pred_1)
           po_data <- cbind(po_data,o_0_pred = outcome_models$o_mod_pred_0)
           po_data <- cbind(po_data,e_pred = PS_model$e_pred)
+          if (e_method == "Random forest"){
+            po_data <- po_data %>% rename(e_pred = predictions)
+          }
         },
         #if an error occurs, tell me the error
         error=function(e) {
@@ -305,7 +289,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       {
         #First setting missing values to 99
         po_data <- po_data %>% mutate_if(is.numeric, function(x) ifelse(is.na(x), 99, x))
-        
+
         #Calculating pseudo outcome
         po_data$pse_Y <- ((po_data$A - po_data$e_pred)/(po_data$e_pred*(1-po_data$e_pred))) *
           (po_data$Y - (po_data$A*po_data$o_1_pred +(1-po_data$A)*po_data$o_0_pred)) +
@@ -317,7 +301,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
         print(e)
       }
     )
-    
+
 
     #--- Collecting full test data with pseudo-outcomes ---#
     if (i==0){
@@ -326,21 +310,18 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
     else {
       po_data_all <- rbind(po_data_all,po_data)
     }
-    
-    
+
+
     #--- Running pseudo-outcome regression (if 3 split option chosen) ---#
     if (splits == 3){
       tryCatch(
         {
-          pse_model <- Pseudo_mod(data = po_data,
-                                  id = id,
-                                  outcome = outcome,
-                                  exposure = exposure,
-                                  pse_method = pse_method,
-                                  pse_covariates = pse_covariates,
-                                  pse_SL_lib = pse_SL_lib,
-                                  nuisance_estimates_input = nuisance_estimates_input,
-                                  pred_data = newdata)
+          pse_model <- nuis_mod(model = "Pseudo outcome",
+                                data = po_data,
+                                method = pse_method,
+                                covariates = pse_covariates,
+                                SL_lib = pse_SL_lib,
+                                pred_data = newdata)
         },
         #if an error occurs, tell me the error
         error=function(e) {
@@ -358,19 +339,16 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       }
     }
   }
-  
+
   if (splits == 1 | splits == 10){
     tryCatch(
       {
-        pse_model <- Pseudo_mod(data = po_data_all,
-                                id = id,
-                                outcome = outcome,
-                                exposure = exposure,
-                                pse_method = pse_method,
-                                pse_covariates = pse_covariates,
-                                pse_SL_lib = pse_SL_lib,
-                                nuisance_estimates_input = nuisance_estimates_input,
-                                pred_data = newdata)
+        pse_model <- nuis_mod(model = "Pseudo outcome",
+                              data = po_data_all,
+                              method = pse_method,
+                              covariates = pse_covariates,
+                              SL_lib = pse_SL_lib,
+                              pred_data = newdata)
       },
       #if an error occurs, tell me the error
       error=function(e) {
@@ -409,29 +387,26 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
 
 ###############################################################
 
-# #Example 
-# DR_check <- DR_learner(analysis = "SL imputation",
-#                        data = check,
-#                        id = "ID",
-#                        outcome = "Y",
-#                        exposure = "A",
-#                        outcome_observed_indicator = "G_obs",
-#                        splits = 3,
-#                        e_covariates = c("X1","X2","X3"),
-#                        e_method = "Parametric",
-#                        e_SL_lib = c("SL.lm"),
-#                        e_SL_strat = TRUE,
-#                        out_method = "Parametric",
-#                        out_covariates = c("X1","X2","X3"),
-#                        out_SL_lib = c("SL.lm"),
-#                        out_SL_strat = FALSE,
-#                        pse_method = "Parametric",
-#                        pse_covariates = c("X1"),
-#                        pse_SL_lib = c("SL.lm"),
-#                        imp_covariates = c("X3","X5","X6"),
-#                        imp_SL_lib = c("SL.lm"),
-#                        imp_SL_strat = FALSE,
-#                        newdata = check)
+# #Example
+DR_check <- DR_learner(analysis = "SL imputation",
+                       data = check,
+                       id = "ID",
+                       outcome = "Y",
+                       exposure = "A",
+                       outcome_observed_indicator = "G_obs",
+                       splits = 10,
+                       e_covariates = c("X1","X2","X3"),
+                       e_method = "Parametric",
+                       e_SL_lib = c("SL.lm"),
+                       out_method = "Super learner",
+                       out_covariates = c("X1","X2","X3"),
+                       out_SL_lib = c("SL.lm"),
+                       pse_method = "Parametric",
+                       pse_covariates = c("X1"),
+                       pse_SL_lib = c("SL.lm"),
+                       imp_covariates = c("X3","X5","X6"),
+                       imp_SL_lib = c("SL.lm"),
+                       newdata = check)
 # 
 # DR_check <- DR_learner(analysis = "Complete case",
 #                        data = check,
