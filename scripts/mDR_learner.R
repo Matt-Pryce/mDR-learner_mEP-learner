@@ -33,15 +33,12 @@ library(mice)
 #' @param out_method Statistical technique used to run the outcome models
 #' @param out_covariates  List containing the names of the variables to be input into each outcome model
 #' @param out_SL_lib Library to be used in super learner if selected
-#' @param out_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies outcomes - Only use if outcome binary)
 #' @param e_method Statistical technique used to run the propensity score model
 #' @param e_covariates  List containing the names of the variables to be input into the propensity score model
 #' @param e_SL_lib Library to be used in super learner if selected
-#' @param e_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies individuals based on exposure)
 #' @param g_method Statistical technique used to run the missingness model
 #' @param g_covariates List containing the names of the variables to be input into the missingness model, excluding exposure
 #' @param g_SL_lib Library to be used in super learner if selected for missingness model
-#' @param g_SL_strat If missingness model is estimated using SL, indicates whether stratification should be used in the super learner CV 
 #' @param nuisance_estimates_input Indicator for whether nuisance estimates provided
 #' @param o_0_pred Variable name for unexposed outcome predictions (if provided)
 #' @param o_1_pred Variable name for exposed outcome predictions (if provided)
@@ -65,15 +62,12 @@ mDR_learner <- function(data,
                         e_method = c("Parametric","Random forest","Super Learner"),
                         e_covariates,
                         e_SL_lib,
-                        e_SL_strat = TRUE,
                         out_method = c("Parametric","Random forest","Super Learner"),
                         out_covariates,
                         out_SL_lib,
-                        out_SL_strat = FALSE,
                         g_method = c("Parametric","Random forest","Super Learner"),
                         g_covariates,
                         g_SL_lib,
-                        g_SL_strat = TRUE,
                         nuisance_estimates_input = 0,
                         e_pred = NA,
                         o_0_pred = NA,
@@ -211,18 +205,13 @@ mDR_learner <- function(data,
       #Outcome models
       tryCatch(
         {
-          outcome_models <- out_mods(data = o_data,
-                                     id = id,
-                                     outcome = outcome,
-                                     exposure = exposure,
-                                     out_method = out_method,
-                                     out_covariates = out_covariates,
-                                     out_SL_lib = out_SL_lib,
-                                     out_SL_strat = out_SL_strat,
+          outcome_models <- nuis_mod(model = "Outcome",
+                                     data = o_data,
+                                     method = out_method,
+                                     covariates = out_covariates,
+                                     SL_lib = out_SL_lib,
                                      Y_bin = clean_data$Y_bin,
                                      Y_cont = clean_data$Y_cont,
-                                     o_0_pred = o_0_pred,
-                                     o_1_pred = o_1_pred,
                                      pred_data = po_o_data)
         },
         #if an error occurs, tell me the error
@@ -235,17 +224,12 @@ mDR_learner <- function(data,
       #Propensity score model
       tryCatch(
         {
-          PS_model <- PS_mod(data = o_data,
-                             id = id,
-                             outcome = outcome,
-                             exposure = exposure,
-                             e_method = e_method,
-                             e_covariates = e_covariates,
-                             e_SL_lib = e_SL_lib,
-                             e_SL_strat = e_SL_strat,
-                             e_pred = e_pred,
-                             pred_data = po_e_data
-          )
+          PS_model <- nuis_mod(model = "Propensity score",
+                               data = e_data,
+                               method = e_method,
+                               covariates = e_covariates,
+                               SL_lib = e_SL_lib,
+                               pred_data = po_e_data)
         },
         #if an error occurs, tell me the error
         error=function(e) {
@@ -257,15 +241,11 @@ mDR_learner <- function(data,
       #Censoring model
       tryCatch(
         {
-          cen_model <- cen_mod(data = g_data,
-                               id = id,
-                               outcome = outcome,
-                               exposure = exposure,
-                               g_method = g_method,
-                               g_covariates = g_covariates,
-                               g_SL_lib = g_SL_lib,
-                               g_SL_strat = g_SL_strat,
-                               g_pred = g_pred,
+          cen_model <- nuis_mod(model = "Censoring",
+                               data = g_data,
+                               method = g_method,
+                               covariates = g_covariates,
+                               SL_lib = g_SL_lib,
                                pred_data = po_g_data)
         },
         #if an error occurs, tell me the error
@@ -339,15 +319,12 @@ mDR_learner <- function(data,
     if (splits == 4){
       tryCatch(
         {
-          pse_model <- Pseudo_mod(data = po_data,
-                                  id = id,
-                                  outcome = outcome,
-                                  exposure = exposure,
-                                  pse_method = pse_method,
-                                  pse_covariates = pse_covariates,
-                                  pse_SL_lib = pse_SL_lib,
-                                  nuisance_estimates_input = nuisance_estimates_input,
-                                  pred_data = newdata)
+          pse_model <- nuis_mod(model = "Pseudo outcome",
+                                data = po_data,
+                                method = pse_method,
+                                covariates = pse_covariates,
+                                SL_lib = pse_SL_lib,
+                                pred_data = newdata)
         },
         #if an error occurs, tell me the error
         error=function(e) {
@@ -368,15 +345,12 @@ mDR_learner <- function(data,
   if (splits == 1 | splits == 10){
     tryCatch(
       {
-        pse_model <- Pseudo_mod(data = po_data_all,
-                                id = id,
-                                outcome = outcome,
-                                exposure = exposure,
-                                pse_method = pse_method,
-                                pse_covariates = pse_covariates,
-                                pse_SL_lib = pse_SL_lib,
-                                nuisance_estimates_input = nuisance_estimates_input,
-                                pred_data = newdata)
+        pse_model <- nuis_mod(model = "Pseudo outcome",
+                              data = po_data_all,
+                              method = pse_method,
+                              covariates = pse_covariates,
+                              SL_lib = pse_SL_lib,
+                              pred_data = newdata)
       },
       #if an error occurs, tell me the error
       error=function(e) {
@@ -415,29 +389,26 @@ mDR_learner <- function(data,
 
 ###############################################################
 # 
-# #Example 
-# mDR_check <- mDR_learner(data = check,
-#                          id = "ID",
-#                          outcome = "Y",
-#                          exposure = "A",
-#                          outcome_observed_indicator = "G_obs",
-#                          splits = 4,
-#                          e_covariates = c("X1","X2","X3"),
-#                          e_method = "Parametric",
-#                          e_SL_lib = c("SL.lm"),
-#                          e_SL_strat = TRUE,
-#                          out_method = "Parametric",
-#                          out_covariates = c("X1","X2","X3"),
-#                          out_SL_lib = c("SL.lm"),
-#                          out_SL_strat = FALSE,
-#                          g_covariates = c("X1","X2","X3"),
-#                          g_method = "Super learner",
-#                          g_SL_lib = c("SL.lm"),
-#                          g_SL_strat = TRUE,
-#                          pse_method = "Parametric",
-#                          pse_covariates = c("X1"),
-#                          pse_SL_lib = c("SL.lm"),
-#                          newdata = check)
+# #Example
+mDR_check <- mDR_learner(data = check,
+                         id = "ID",
+                         outcome = "Y",
+                         exposure = "A",
+                         outcome_observed_indicator = "G_obs",
+                         splits = 4,
+                         e_covariates = c("X1","X2","X3"),
+                         e_method = "Parametric",
+                         e_SL_lib = c("SL.lm"),
+                         out_method = "Parametric",
+                         out_covariates = c("X1","X2","X3"),
+                         out_SL_lib = c("SL.lm"),
+                         g_covariates = c("X1","X2","X3"),
+                         g_method = "Super learner",
+                         g_SL_lib = c("SL.lm"),
+                         pse_method = "Parametric",
+                         pse_covariates = c("X1"),
+                         pse_SL_lib = c("SL.lm"),
+                         newdata = check)
 # 
 # mDR_check <- mDR_learner(data = check,
 #                          id = "ID",
