@@ -95,32 +95,32 @@ data_manage_1tp <- function(data,
       if (nuisance_estimates_input == 0){
         #For all analysis choices and both learners
         vars <- append(vars,out_covariates)
-        if (learner == "DR-learner"){
+        if (learner == "DR-learner" | learner == "EP-learner"){
           vars <- append(vars,e_covariates)
           vars <- append(vars,pse_covariates)
         }
-        if (learner == "mDR-learner"){
+        if (learner == "mDR-learner" | learner == "mEP-learner"){
           vars <- append(vars,e_covariates)
           vars <- append(vars,g_covariates)
           vars <- append(vars,pse_covariates)
         }
-        if (learner != "mDR-learner"){
-          if (analysis_type == "SL imputation"){   
+        if (learner == "T-learner" | learner == "DR-learner" | learner == "EP-learner"){
+          if (analysis_type == "SL imputation"){
             vars <- append(vars,imp_covariates)
           }
         }
         vars <- vars[!duplicated(vars)]
       }
-      
-      if (nuisance_estimates_input == 1){
+
+      if (nuisance_estimates_input == 1){    
         vars <- append(vars,o_0_pred)
         vars <- append(vars,o_1_pred)
-        
-        if (learner == "DR-learner"){         
+
+        if (learner == "DR-learner" | learner == "EP-learner"){
           vars <- append(vars,pse_covariates)
           vars <- append(vars,e_pred)
         }
-        if (learner == "mDR-learner"){        
+        if (learner == "mDR-learner" | learner == "mEP-learner"){
           vars <- append(vars,pse_covariates)
           vars <- append(vars,e_pred)
           vars <- append(vars,g_pred)
@@ -135,11 +135,11 @@ data_manage_1tp <- function(data,
       print(e)
     }
   )
-  
+
   #------------------------#
   #--- Rename variables ---#
   #------------------------#
-  tryCatch( 
+  tryCatch(
     {
       names(data)[names(data) == id] <- "ID"
       names(data)[names(data) == exposure] <- "A"
@@ -150,10 +150,10 @@ data_manage_1tp <- function(data,
       if (nuisance_estimates_input == 1){
         names(data)[names(data) == o_0_pred] <- "o_0_pred"
         names(data)[names(data) == o_1_pred] <- "o_1_pred"
-        if (learner == "DR-learner"){
+        if (learner == "DR-learner" | learner == "EP-learner"){
           names(data)[names(data) == e_pred] <- "e_pred"
         }
-        if (learner == "mDR-learner"){
+        if (learner == "mDR-learner" | learner == "mEP-learner"){
           names(data)[names(data) == e_pred] <- "e_pred"
           names(data)[names(data) == g_pred] <- "g_pred"
         }
@@ -164,12 +164,12 @@ data_manage_1tp <- function(data,
       print(e)
     }
   )
-  
-  
+
+
   #-----------------------#
-  #--- Format new data ---#   
+  #--- Format new data ---#
   #-----------------------#
-  tryCatch( 
+  tryCatch(
     {
       if (nuisance_estimates_input == 0 & learner == "T-learner"){
         new_data_vars <- c(id,out_covariates)
@@ -187,31 +187,31 @@ data_manage_1tp <- function(data,
       print(e)
     }
   )
-  
-  
+
+
   #--------------------#
   #--- Logic checks ---#
   #--------------------#
-  tryCatch( 
+  tryCatch(
     {
       #Checking if exposure is binary
       if (as.numeric(all(data$A %in% 0:1)) == 0){
         stop("Exposure must be binary")
       }
-      #Checking in outcome is binary or continuous 
+      #Checking in outcome is binary or continuous
       Y_comp <- na.omit(data$Y)
       Y_bin <- as.numeric(all(Y_comp %in% 0:1))
       Y_cont <- 0
       if (Y_bin == 0 & typeof(Y_comp) == "double"){
         Y_cont <- 1
-      }   
+      }
     },
     error=function(e) {
       stop('An error occured when formatting the new data')
       print(e)
     }
   )
-  
+
   #-----------------------------#
   #--- Returning information ---#
   #-----------------------------#
