@@ -150,22 +150,22 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       #--- Collecting data for training models ---#
       tryCatch(
         {
-          #Data for propensity score model
+          #Data for propensity score and outcome models
           e_data <- analysis_data
-          e_data <- subset(e_data,e_data$s == i)   #Same for all splits 
-          
-          #Data for outcome models
           o_data <- analysis_data
           if (analysis == "Available case"){
             o_data <- subset(o_data,o_data$G == 1)
           }
           if (splits == 3){
+            e_data <- subset(e_data,e_data$s == i)
             o_data <- subset(o_data,o_data$s == ((i+1) %% 3))
           }
           else if (splits == 1){
+            e_data <- subset(e_data,e_data$s == i)
             o_data <- subset(o_data,o_data$s == i)
           }
           else if (splits == 10){
+            e_data <- subset(e_data,e_data$s != i)
             o_data <- subset(o_data,o_data$s != i)
           }
         },
