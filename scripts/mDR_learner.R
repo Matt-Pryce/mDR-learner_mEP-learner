@@ -135,22 +135,23 @@ mDR_learner <- function(data,
       #--- Collecting data for training models ---#
       tryCatch(
         {
-          #Data for propensity score model
+          #Data for propensity score, outcome models & censoring models 
           e_data <- analysis_data
-          e_data <- subset(e_data,e_data$s == i)   #Same for all splits 
-          
-          #Data for outcome models & censoring models 
           o_data <- analysis_data
           g_data <- analysis_data
+          
           if (splits == 4){
+            e_data <- subset(e_data,e_data$s == i)
             o_data <- subset(o_data,o_data$s == ((i+1) %% 4))
             g_data <- subset(g_data,g_data$s == ((i+2) %% 4))
           }
           else if (splits == 1){
+            e_data <- subset(e_data,e_data$s == i)
             o_data <- subset(o_data,o_data$s == i)
             g_data <- subset(g_data,g_data$s == i)
           }
           else if (splits == 10){
+            e_data <- subset(e_data,e_data$s != i)
             o_data <- subset(o_data,o_data$s != i)
             g_data <- subset(g_data,g_data$s != i)
           }
