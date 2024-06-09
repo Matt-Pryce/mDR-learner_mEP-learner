@@ -46,14 +46,27 @@ nuis_mod <- function(model,
   #------------------------------#
   #--- Creating training data ---#
   #------------------------------#
-  
-  tryCatch( 
+
+  tryCatch(
     {
       if (model == "Outcome"){
         train_data0 <- subset(data,data$A==0)
         train_data0 <- subset(train_data0,select = c("Y",covariates))
         train_data1 <- subset(data,data$A==1)
         train_data1 <- subset(train_data1,select = c("Y",covariates))
+      } 
+      else if (model == "Outcome - MSE"){
+        
+        train_data0 <- subset(data,data$A==0)
+        train_data1 <- subset(data,data$A==1)
+        if (Y_bin == 1){
+          train_data0 <- subset(train_data0,select = c("Y",covariates))
+          train_data1 <- subset(train_data1,select = c("Y",covariates))
+        }
+        if (Y_cont == 1){
+          train_data0 <- subset(train_data0,select = c("Y_norm",covariates))
+          train_data1 <- subset(train_data1,select = c("Y_norm",covariates))
+        }
       }
       else if (model == "Imputation"){
         train_data <- subset(data,data$G==1)
@@ -74,7 +87,7 @@ nuis_mod <- function(model,
       print(e)
     }
   )
-  
+
   #----------------------#
   #--- Running models ---#
   #----------------------#
@@ -103,7 +116,7 @@ nuis_mod <- function(model,
       }
     )
   }
-  
+
   if (model == "Outcome"){
     tryCatch(
       {
@@ -159,6 +172,68 @@ nuis_mod <- function(model,
       }
     )
   }
+
+  if (model == "Outcome - MSE"){
+    tryCatch(
+      {
+        if (method == "Random forest"){
+          X_S_0 <- as.matrix(subset(train_data0, select = covariates))
+          X_S_1 <- as.matrix(subset(train_data1, select = covariates))
+          if (Y_bin == 1){
+            mod_0 <- regression_forest(X_S_0, train_data0$Y, honesty = FALSE,tune.parameters = "all")
+            mod_1 <- regression_forest(X_S_1, train_data1$Y, honesty = FALSE,tune.parameters = "all")
+          }
+          else {
+            mod_0 <- regression_forest(X_S_0, train_data0$Y_norm, honesty = FALSE,tune.parameters = "all")
+            mod_1 <- regression_forest(X_S_1, train_data1$Y_norm, honesty = FALSE,tune.parameters = "all")
+          }
+        }
+        else if (method == "Parametric"){
+          if (Y_bin == 1){
+            #Running first outcome models
+            mod_0 <- glm(Y ~ . , data = train_data0, family = binomial())
+            mod_1 <- glm(Y ~ . , data = train_data1, family = binomial())
+          }
+          if (Y_cont == 1){
+            #Running first outcome models
+            mod_0 <- glm(Y_norm ~ . , data = train_data0, family = quasibinomial)
+            mod_1 <- glm(Y_norm ~ . , data = train_data1, family = quasibinomial)
+          }
+        }
+        else if (method == "Super learner"){
+          if (Y_bin == 1){
+            mod_0 <- SuperLearner(Y = train_data0$Y, X = data.frame(subset(train_data0, select = covariates)),
+                                  method = "method.NNLS",
+                                  family = binomial(),
+                                  cvControl = list(V = 10, stratifyCV=TRUE),
+                                  SL.library = SL_lib)
+            mod_1 <- SuperLearner(Y = train_data1$Y, X = data.frame(subset(train_data1, select = covariates)),
+                                  method = "method.NNLS",
+                                  family = binomial(),
+                                  cvControl = list(V = 10, stratifyCV=TRUE),
+                                  SL.library = SL_lib)
+          }
+          if (Y_cont == 1){
+            mod_0 <- SuperLearner(Y = train_data0$Y_norm, X = data.frame(subset(train_data0, select = covariates)),
+                                  method = "method.NNLS",
+                                  family = gaussian(),
+                                  cvControl = list(V = 10, stratifyCV=FALSE),
+                                  SL.library = SL_lib)
+            mod_1 <- SuperLearner(Y = train_data1$Y_norm, X = data.frame(subset(train_data1, select = covariates)),
+                                  method = "method.NNLS",
+                                  family = gaussian(),
+                                  cvControl = list(V = 10, stratifyCV=FALSE),
+                                  SL.library = SL_lib)
+          }
+        }
+      },
+      error=function(e) {
+        stop('An error occured when running outcome models')
+        print(e)
+      }
+    )
+  }
+
 
   if (model == "Propensity score" | model == "Censoring" | model == "Pseudo outcome"){
     if (method == "Random forest"){
@@ -224,7 +299,7 @@ nuis_mod <- function(model,
   #-----------------------------------#
   #--- Obtaining model predictions ---#
   #-----------------------------------#
-
+  
   if (model == "Imputation"){
     tryCatch(
       {
@@ -232,7 +307,7 @@ nuis_mod <- function(model,
         pred_data <- subset(data,select = c(covariates,"A"))
         preds <- predict(mod,pred_data)$pred
         analysis_data <- cbind(data,imp_pred = preds)
-
+        
         #Imputing predictions for missing outcomes
         for (i in 1:dim(analysis_data)[1]){
           if (is.na(analysis_data$Y[i])==1){
@@ -246,8 +321,8 @@ nuis_mod <- function(model,
       }
     )
   }
-
-  if (model == "Outcome"){
+  
+  if (model == "Outcome" | model == "Outcome - MSE"){
     tryCatch(
       {
         #Obtaining preds from previous outcome model
@@ -272,7 +347,7 @@ nuis_mod <- function(model,
       }
     )
   }
-
+  
   if (model == "Propensity score" | model == "Censoring"){
     if (method == "Random forest"){
       pred <- predict(mod, pred_data)$predictions
@@ -284,7 +359,7 @@ nuis_mod <- function(model,
       pred <- predict(mod, as.data.frame(pred_data))$pred
     }
   }
-
+  
   if (model == "Pseudo outcome"){
     if (method == "Random forest"){
       pred_data_matrix <- as.matrix(subset(pred_data, select = c(covariates)))
@@ -299,17 +374,17 @@ nuis_mod <- function(model,
       pred <- predict(mod, pred_data)$pred
     }
   }
-
-
-
+  
+  
+  
   #-----------------------------#
   #--- Returning information ---#
   #-----------------------------#
-
+  
   if (model == "Imputation"){
     output <- analysis_data
   }
-  else if (model == "Outcome"){
+  else if (model == "Outcome" | model == "Outcome - MSE"){
     output <- list(o_mod_pred_1 = mod_pred_1,
                    o_mod_pred_0 = mod_pred_0,
                    o_mod_0 = mod_0,
@@ -327,7 +402,7 @@ nuis_mod <- function(model,
     output <- list(po_pred = pred,
                    po_mod = mod)
   }
-
+  
   return(output)
 }
 
