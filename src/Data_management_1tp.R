@@ -51,6 +51,7 @@ data_manage_1tp <- function(data,
                             outcome,
                             exposure,
                             outcome_observed_indicator,
+                            CATE_est,
                             out_covariates,
                             e_covariates,
                             g_covariates,
@@ -104,6 +105,11 @@ data_manage_1tp <- function(data,
           vars <- append(vars,g_covariates)
           vars <- append(vars,pse_covariates)
         }
+        if (learner == "debiased_MSE"){
+          vars <- append(vars,e_covariates)
+          vars <- append(vars,g_covariates)
+          vars <- append(vars,CATE_est)
+        }
         if (learner == "T-learner" | learner == "DR-learner" | learner == "EP-learner"){
           if (analysis_type == "SL imputation"){
             vars <- append(vars,imp_covariates)
@@ -147,6 +153,9 @@ data_manage_1tp <- function(data,
       if (missing_outcome_data == 1){
         names(data)[names(data) == outcome_observed_indicator] <- "G"
       }
+      if (learner == "debiased_MSE"){
+        names(data)[names(data) == CATE_est] <- "CATE_est"
+      }
       if (nuisance_estimates_input == 1){
         names(data)[names(data) == o_0_pred] <- "o_0_pred"
         names(data)[names(data) == o_1_pred] <- "o_1_pred"
@@ -176,7 +185,7 @@ data_manage_1tp <- function(data,
         newdata <- subset(newdata,select=new_data_vars)
         names(newdata)[names(newdata) == id] <- "ID"
       }
-      if (learner != "T-learner"){
+      if (learner != "T-learner" & learner != "debiased_MSE"){
         new_data_vars <- c(id,pse_covariates)
         newdata <- subset(newdata,select=new_data_vars)
         names(newdata)[names(newdata) == id] <- "ID"
@@ -205,6 +214,20 @@ data_manage_1tp <- function(data,
       if (Y_bin == 0 & typeof(Y_comp) == "double"){
         Y_cont <- 1
       }
+      
+      if (learner == "debiased_MSE"){
+        #Normalizing outcome and CATE estimates with min-max norm when outcome in continuous
+        if (Y_bin == 0){
+          min_Y <- min(data$Y,na.rm = T)
+          max_Y <- max(data$Y,na.rm = T)
+          
+          #Outcome
+          data$Y_norm <- (data$Y - min_Y)/(max_Y - min_Y)
+          
+          #CATE estimates
+          data$CATE_est_norm <- (data$CATE_est - min_Y)/(max_Y - min_Y)
+        }
+      }
     },
     error=function(e) {
       stop('An error occured when formatting the new data')
@@ -215,10 +238,20 @@ data_manage_1tp <- function(data,
   #-----------------------------#
   #--- Returning information ---#
   #-----------------------------#
-  output <- list(data=data,
-                 Y_bin = Y_bin,
-                 Y_cont = Y_cont,
-                 newdata=newdata)
+  if (learner != "debiased_MSE"){
+    output <- list(data=data,
+                   Y_bin = Y_bin,
+                   Y_cont = Y_cont,
+                   newdata=newdata)  
+  }
+  else {
+    output <- list(data=data,
+                   Y_bin = Y_bin,
+                   Y_cont = Y_cont,
+                   max_Y = max_Y,
+                   min_Y = min_Y)
+  }
+  
   return(output)
 }
   
