@@ -63,7 +63,7 @@ source("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical M
 #'         pseudo-outcome predictions (if splits 4) 
 
 
-EP_learner <- function(analysis = c("Complete case","Available case","SL imputation","mEP-learner"),
+EP_learner <- function(analysis = c("Complete case","Available case","SL imputation","IPCW","mEP-learner"),
                        data,
                        id,
                        outcome,
@@ -125,7 +125,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
                                 newdata = newdata)
   
   
-  
+
   #-------------------------#
   #--- Imputing outcomes ---#
   #-------------------------#
@@ -137,6 +137,27 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
                               Y_bin = clean_data$Y_bin,
                               Y_cont = clean_data$Y_cont)
   }
+  
+
+  #----------------------------------#
+  #--- IPCW weighting on outcomes ---#    Only viable for continous outcomes atm
+  #----------------------------------#
+  if (analysis == "IPCW" & nuisance_estimates_input == 0){
+    analysis_data <- nuis_mod(model = "IPCW",
+                              data = clean_data$data,
+                              method = g_method,
+                              covariates = g_covariates,
+                              SL_lib = g_SL_lib,
+                              pred_data = clean_data,
+                              Y_bin = clean_data$Y_bin,
+                              Y_cont = clean_data$Y_cont)
+  }
+  
+
+  #---------------------------#
+  #--- Non imputation/IPCW ---#
+  #---------------------------#
+  
   if (analysis == "Complete case"){
     analysis_data <- clean_data$data
     analysis_data <- subset(analysis_data,is.na(analysis_data$Y)==0)
@@ -144,7 +165,6 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   if (analysis == "Available case" | analysis == "mEP-learner"){
     analysis_data <- clean_data$data
   }
-
   
   
   #-------------------------------#
@@ -179,8 +199,8 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
           #Data for propensity score, outcome models & censoring models
           e_data <- analysis_data
           o_data <- analysis_data
-          if (analysis == "Available case" | analysis == "mEP-learner"){
-            o_data <- subset(o_data,is.na(o_data$Y) == 0)
+          if (analysis == "Available case" | analysis == "mEP-learner" | analysis == "IPCW"){
+            o_data <- subset(o_data,is.na(o_data$Y) == 0)  
           }
           if (analysis == "mEP-learner"){
             g_data <- analysis_data
@@ -223,13 +243,13 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
             po_g_data <- as.matrix(subset(po_g_data, select = -c(s)))
           }
           if (analysis != "mEP-learner"){
-            po_data <- subset(analysis_data,select = c("ID","Y","A",pse_covariates,"s")) 
+            po_data <- subset(analysis_data,select = c("ID","Y","A",pse_covariates,"s"))
           }
           else if (analysis == "mEP-learner"){
             po_data <- subset(analysis_data,select = c("ID","Y","A","G",pse_covariates,"s"))
           }
           po_data <- subset(po_data,po_data$s == i)
-          
+
         },
         #if an error occurs, tell me the error
         error=function(e) {
@@ -344,10 +364,10 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   #--- Establishing Sieve ---#
   #--------------------------#
 
-  if (analysis == "Available case" | analysis == "mEP-learner"){
+  if (analysis == "Available case" | analysis == "IPCW" |analysis == "mEP-learner"){
     sieve_data <- subset(po_data_all,is.na(po_data_all$Y)==0)   #Only update observed individuals
   }
-  else if (analysis == "Complete case" | analysis == "SL imputation"){
+  else if (analysis == "Complete case" | analysis == "SL imputation"){  
     sieve_data <- po_data_all
   }
 
@@ -371,7 +391,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   sieve_basis_train <- sieve_basis * ((sieve_data$A==1) - (sieve_data$A == 0))
   o_A_pred <- (sieve_data$A == 1) * (sieve_data$o_1_pred) + (sieve_data$A == 0) * (sieve_data$o_0_pred)
 
-  if (analysis == "Complete case" | analysis == "Available case" | analysis == "SL imputation"){
+  if (analysis == "Complete case" | analysis == "Available case" | analysis == "IPCW" | analysis == "SL imputation"){
     glmnet_fit <- glmnet::glmnet(x=sieve_basis_train, y=sieve_data$Y,
                                  offset = o_A_pred,
                                  weights = (sieve_data$A == 1)/sieve_data$e_pred + (sieve_data$A == 0)/(1-sieve_data$e_pred),
@@ -397,12 +417,12 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   #------------------------------#
   #--- Updating outcome preds ---#
   #------------------------------#
-  
+
   sieve_data$correction <- as.vector(sieve_basis %*% beta)
   sieve_data$o_1_pred_star <- sieve_data$o_1_pred + sieve_data$correction
   sieve_data$o_0_pred_star <- sieve_data$o_0_pred - sieve_data$correction
-  
-  if (analysis == "Available case" | analysis == "mEP-learner"){
+
+  if (analysis == "Available case" | analysis == "IPCW" |analysis == "mEP-learner"){
     #Merging updated outcome preds with full dataset
     sieve_data_sub <- subset(sieve_data,select = c(ID,o_1_pred_star,o_0_pred_star))
     po_data_all <- merge(po_data_all,sieve_data_sub,by="ID",all.x = T)
@@ -448,7 +468,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   output <- list(CATE_est = pse_model$po_pred,
                  train_data = po_data_all,
                  newdata = newdata)
-  
+
   return(output)
 }
 
@@ -456,69 +476,64 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
 
 ###############################################################
 
-# #Example
-# EP_check <- EP_learner(analysis = "mEP-learner",
-#                        data = check,
-#                        id = "ID",
-#                        outcome = "Y",
-#                        exposure = "A",
-#                        outcome_observed_indicator = "G_obs",
-#                        splits = 10,
-#                        e_covariates = c("X1","X2","X3","X4","X5","X6",
-#                                         "X7","X8","X9","X10","X11","X12"),
-#                        e_method = "Super learner",
-#                        e_SL_lib = c("SL.mean",
-#                                     "SL.lm"),
-#                                     # "SL.glmnet_8", "SL.glmnet_9",
-#                                     # "SL.glmnet_11"),
-#                        out_method = "Super learner",
-#                        out_covariates = c("X1","X2","X3","X4","X5","X6",
-#                                           "X7","X8","X9","X10","X11","X12"),
-#                        out_SL_lib = c("SL.mean",
-#                                       "SL.lm"),
-#                                       # "SL.glmnet_8", "SL.glmnet_9",
-#                                       # "SL.glmnet_11", "SL.glmnet_12",
-#                                       # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                                       # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                                       # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                                       # "SL.svm_1",
-#                                       # "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        g_covariates = c("X1","X2","X3","X4","X5","X6",
-#                                         "X7","X8","X9","X10","X11","X12"),
-#                        g_method = "Parametric",
-#                        g_SL_lib = c("SL.mean",
-#                                     "SL.lm",
-#                                     "SL.glmnet_8", "SL.glmnet_9",
-#                                     "SL.glmnet_11", "SL.glmnet_12",
-#                                     "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                                     "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                                     "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                                     "SL.svm_1",
-#                                     "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        sieve_interaction_order=3,
-#                        imp_covariates = c("X1","X2","X3","X4","X5","X6",
-#                                           "X7","X8","X9","X10","X11","X12"),
-#                        imp_SL_lib = c("SL.mean",
-#                                       "SL.lm",
-#                                       "SL.glmnet_8", "SL.glmnet_9",
-#                                       "SL.glmnet_11", "SL.glmnet_12",
-#                                       "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                                       "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                                       "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                                       "SL.svm_1",
-#                                       "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        pse_method = "Super learner",
-#                        pse_covariates = c("X1","X2","X3","X4","X5","X6",
-#                                           "X7","X8","X9","X10","X11","X12"),
-#                        pse_SL_lib = c("SL.mean",
-#                                       "SL.lm"),
-#                                       # "SL.glmnet_8", "SL.glmnet_9",
-#                                       # "SL.glmnet_11", "SL.glmnet_12",
-#                                       # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                                       # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                                       # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                                       # "SL.svm_1",
-#                                       # "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        newdata = check)
+#Example
+EP_check <- EP_learner(analysis = "IPCW",
+                       data = check,
+                       id = "ID",
+                       outcome = "Y",
+                       exposure = "A",
+                       outcome_observed_indicator = "G_obs",
+                       splits = 10,
+                       e_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       e_method = "Super learner",
+                       e_SL_lib = c("SL.mean",
+                                    "SL.lm"),
+                                    # "SL.glmnet_8", "SL.glmnet_9",
+                                    # "SL.glmnet_11"),
+                       out_method = "Super learner",
+                       out_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       out_SL_lib = c("SL.mean",
+                                      "SL.lm"),
+                                      # "SL.glmnet_8", "SL.glmnet_9",
+                                      # "SL.glmnet_11", "SL.glmnet_12",
+                                      # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                                      # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                                      # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                                      # "SL.svm_1",
+                                      # "SL.kernelKnn_4","SL.kernelKnn_10"),
+                       g_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       g_method = "Super learner",
+                       g_SL_lib = c("SL.mean",
+                                    "SL.lm"),#,
+                                    # "SL.glmnet_8", "SL.glmnet_9",
+                                    # "SL.glmnet_11", "SL.glmnet_12",
+                                    # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                                    # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                                    # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                                    # "SL.svm_1",
+                                    # "SL.kernelKnn_4","SL.kernelKnn_10"),
+                       sieve_interaction_order=3,
+                       imp_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       imp_SL_lib = c("SL.mean",
+                                      "SL.lm"),#,
+                                      # "SL.glmnet_8", "SL.glmnet_9",
+                                      # "SL.glmnet_11", "SL.glmnet_12",
+                                      # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                                      # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                                      # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                                      # "SL.svm_1",
+                                      # "SL.kernelKnn_4","SL.kernelKnn_10"),
+                       pse_method = "Super learner",
+                       pse_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       pse_SL_lib = c("SL.mean",
+                                      "SL.lm"),
+                                      # "SL.glmnet_8", "SL.glmnet_9",
+                                      # "SL.glmnet_11", "SL.glmnet_12",
+                                      # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                                      # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                                      # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                                      # "SL.svm_1",
+                                      # "SL.kernelKnn_4","SL.kernelKnn_10"),
+                       newdata = check)
 
 
