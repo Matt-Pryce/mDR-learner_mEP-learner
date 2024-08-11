@@ -114,11 +114,14 @@ data_manage_1tp <- function(data,
           if (analysis_type == "SL imputation"){
             vars <- append(vars,imp_covariates)
           }
+          if (analysis_type == "IPCW"){
+            vars <- append(vars,g_covariates)
+          }
         }
         vars <- vars[!duplicated(vars)]
       }
 
-      if (nuisance_estimates_input == 1){    
+      if (nuisance_estimates_input == 1){    #Cannot handle IPCW or imputation
         vars <- append(vars,o_0_pred)
         vars <- append(vars,o_1_pred)
 
@@ -156,7 +159,7 @@ data_manage_1tp <- function(data,
       if (learner == "debiased_MSE"){
         names(data)[names(data) == CATE_est] <- "CATE_est"
       }
-      if (nuisance_estimates_input == 1){
+      if (nuisance_estimates_input == 1){  #Cannot handle IPCW or imputation 
         names(data)[names(data) == o_0_pred] <- "o_0_pred"
         names(data)[names(data) == o_1_pred] <- "o_1_pred"
         if (learner == "DR-learner" | learner == "EP-learner"){
@@ -214,16 +217,16 @@ data_manage_1tp <- function(data,
       if (Y_bin == 0 & typeof(Y_comp) == "double"){
         Y_cont <- 1
       }
-      
+
       if (learner == "debiased_MSE"){
         #Normalizing outcome and CATE estimates with min-max norm when outcome in continuous
         if (Y_bin == 0){
           min_Y <- min(data$Y,na.rm = T)
           max_Y <- max(data$Y,na.rm = T)
-          
+
           #Outcome
           data$Y_norm <- (data$Y - min_Y)/(max_Y - min_Y)
-          
+
           #CATE estimates
           data$CATE_est_norm <- (data$CATE_est - min_Y)/(max_Y - min_Y)
         }
@@ -242,7 +245,7 @@ data_manage_1tp <- function(data,
     output <- list(data=data,
                    Y_bin = Y_bin,
                    Y_cont = Y_cont,
-                   newdata=newdata)  
+                   newdata=newdata)
   }
   else {
     output <- list(data=data,
@@ -251,7 +254,7 @@ data_manage_1tp <- function(data,
                    max_Y = max_Y,
                    min_Y = min_Y)
   }
-  
+
   return(output)
 }
   
