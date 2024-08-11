@@ -78,6 +78,9 @@ nuis_mod <- function(model,
       else if (model == "Censoring"){
         train_data <- as.data.frame(subset(data,select = c("G",covariates,"A","s")))
       }
+      else if (model == "IPCW"){
+        train_data <- as.data.frame(subset(data,select = c("G",covariates,"A")))
+      }
       else if (model == "Pseudo outcome"){
         train_data <- data
       }
@@ -235,13 +238,13 @@ nuis_mod <- function(model,
   }
 
 
-  if (model == "Propensity score" | model == "Censoring" | model == "Pseudo outcome"){
+  if (model == "Propensity score" | model == "Censoring" | model == "Pseudo outcome" | model == "IPCW"){
     if (method == "Random forest"){
       if (model == "Propensity score"){
         X <- as.matrix(subset(train_data, select = covariates))
         mod <- regression_forest(X, train_data$A, honesty = FALSE,tune.parameters = "all")
       }
-      else if (model == "Censoring"){
+      else if (model == "Censoring" | model == "IPCW"){
         X <- as.matrix(subset(train_data, select = c(covariates,"A")))
         mod <- regression_forest(X, train_data$G, honesty = TRUE,tune.parameters = "all")
       }
@@ -255,8 +258,13 @@ nuis_mod <- function(model,
         fit_data <- subset(train_data,select = -c(s))
         mod <- glm(A ~ . , data = fit_data, family = binomial())
       }
-      else if (model == "Censoring"){
-        fit_data <- subset(train_data,select = -c(s))
+      else if (model == "Censoring" | model == "IPCW"){
+        if (model == "Censoring"){
+          fit_data <- subset(train_data,select = -c(s))
+        }
+        else {
+          fit_data <- train_data
+        }
         mod <- glm(G ~ . , data = fit_data, family = binomial())
       }
       else if (model == "Pseudo outcome"){
@@ -274,7 +282,7 @@ nuis_mod <- function(model,
                             cvControl = list(V = cv_folds, stratifyCV=TRUE),
                             SL.library = SL_lib)
       }
-      else if (model == "Censoring"){
+      else if (model == "Censoring" | model == "IPCW"){
         sums <- table(train_data$G)
         cv_folds <- min(10,sums[1],sums[2])
         mod <- SuperLearner(Y = train_data$G, X = data.frame(subset(train_data, select = c(covariates,"A"))),
@@ -299,7 +307,7 @@ nuis_mod <- function(model,
   #-----------------------------------#
   #--- Obtaining model predictions ---#
   #-----------------------------------#
-  
+
   if (model == "Imputation"){
     tryCatch(
       {
@@ -307,7 +315,7 @@ nuis_mod <- function(model,
         pred_data <- subset(data,select = c(covariates,"A"))
         preds <- predict(mod,pred_data)$pred
         analysis_data <- cbind(data,imp_pred = preds)
-        
+
         #Imputing predictions for missing outcomes
         for (i in 1:dim(analysis_data)[1]){
           if (is.na(analysis_data$Y[i])==1){
@@ -322,6 +330,26 @@ nuis_mod <- function(model,
     )
   }
   
+  if (model == "IPCW"){
+    tryCatch(
+      {
+        #Obtaining predictions from imputation model
+        pred_data <- subset(data,select = c(covariates,"A"))
+        preds <- predict(mod,pred_data)$pred
+        analysis_data <- cbind(data,g_pred = preds)
+        
+        #Creating re-weighted outcomes 
+        for (i in 1:dim(analysis_data)[1]){
+          analysis_data$Y[i] = analysis_data$Y[i]/analysis_data$g_pred[i]
+        }
+      },
+      error=function(e) {
+        stop('An error occured when creating imputation data')
+        print(e)
+      }
+    )
+  }
+
   if (model == "Outcome" | model == "Outcome - MSE"){
     tryCatch(
       {
@@ -347,7 +375,7 @@ nuis_mod <- function(model,
       }
     )
   }
-  
+
   if (model == "Propensity score" | model == "Censoring"){
     if (method == "Random forest"){
       pred <- predict(mod, pred_data)$predictions
@@ -359,7 +387,7 @@ nuis_mod <- function(model,
       pred <- predict(mod, as.data.frame(pred_data))$pred
     }
   }
-  
+
   if (model == "Pseudo outcome"){
     if (method == "Random forest"){
       pred_data_matrix <- as.matrix(subset(pred_data, select = c(covariates)))
@@ -374,14 +402,14 @@ nuis_mod <- function(model,
       pred <- predict(mod, pred_data)$pred
     }
   }
-  
-  
-  
+
+
+
   #-----------------------------#
   #--- Returning information ---#
   #-----------------------------#
-  
-  if (model == "Imputation"){
+
+  if (model == "Imputation" | model == "IPCW"){
     output <- analysis_data
   }
   else if (model == "Outcome" | model == "Outcome - MSE"){
@@ -402,7 +430,7 @@ nuis_mod <- function(model,
     output <- list(po_pred = pred,
                    po_mod = mod)
   }
-  
+
   return(output)
 }
 
