@@ -138,6 +138,7 @@ mDR_learner <- function(data,
           #Data for propensity score, outcome models & censoring models 
           e_data <- analysis_data
           o_data <- analysis_data
+          o_data <- subset(o_data,is.na(o_data$Y) == 0)
           g_data <- analysis_data
           
           if (splits == 4){
@@ -238,7 +239,7 @@ mDR_learner <- function(data,
           print(e)
         }
       )
-      
+
       #Censoring model
       tryCatch(
         {
@@ -255,8 +256,8 @@ mDR_learner <- function(data,
           print(e)
         }
       )
-      
-      
+
+
       #--- Collecting nuisance model predictions ---#
       tryCatch(
         {
@@ -271,7 +272,7 @@ mDR_learner <- function(data,
           print(e)
         }
       )
-      
+
     }
     else if (nuisance_estimates_input == 1){
 
@@ -284,15 +285,15 @@ mDR_learner <- function(data,
         po_data <- subset(po_data,po_data$s == i)
       }
     }
-    
-    
+
+
     #--- Calculating pseudo-outcomes ---#
     tryCatch(
       {
         #--- Calculating pseudo outcome ---#
         #First setting missing values to 99
         po_data <- po_data %>% mutate_if(is.numeric, function(x) ifelse(is.na(x), 99, x))
-        
+
         #Calculating outcome
         po_data$pse_Y <- ((po_data$A - po_data$e_pred)/(po_data$e_pred*(1-po_data$e_pred))) *
           (po_data$G/po_data$g_pred) *
@@ -305,8 +306,8 @@ mDR_learner <- function(data,
         print(e)
       }
     )
-    
-    
+
+
     #--- Collecting full test data with pseudo-outcomes ---#
     if (i==0){
       po_data_all <- po_data
@@ -314,8 +315,8 @@ mDR_learner <- function(data,
     else {
       po_data_all <- rbind(po_data_all,po_data)
     }
-    
-    
+
+
     #--- Running pseudo-outcome regression (if 4 split option chosen) ---#
     if (splits == 4){
       tryCatch(
@@ -360,7 +361,7 @@ mDR_learner <- function(data,
       }
     )
   }
-  
+
   #-----------------------------#
   #--- Returning information ---#
   #-----------------------------#
@@ -375,14 +376,14 @@ mDR_learner <- function(data,
       po_preds <- as.data.frame(cbind(po_preds,pse_mods[[i]]$po_pred))
     }
     po_preds <- po_preds[,2:dim(po_preds)[2]]
-    
+
     avg_CATE_est <- rowMeans(po_preds)
-    
+
     output <- list(CATE_est = avg_CATE_est,
                    pse_preds = po_preds,
                    data = po_data_all)
   }
-  
+
   return(output)
 }
 
@@ -391,25 +392,25 @@ mDR_learner <- function(data,
 ###############################################################
 # 
 # #Example
-mDR_check <- mDR_learner(data = check,
-                         id = "ID",
-                         outcome = "Y",
-                         exposure = "A",
-                         outcome_observed_indicator = "G_obs",
-                         splits = 4,
-                         e_covariates = c("X1","X2","X3"),
-                         e_method = "Parametric",
-                         e_SL_lib = c("SL.lm"),
-                         out_method = "Parametric",
-                         out_covariates = c("X1","X2","X3"),
-                         out_SL_lib = c("SL.lm"),
-                         g_covariates = c("X1","X2","X3"),
-                         g_method = "Super learner",
-                         g_SL_lib = c("SL.lm"),
-                         pse_method = "Parametric",
-                         pse_covariates = c("X1"),
-                         pse_SL_lib = c("SL.lm"),
-                         newdata = check)
+# mDR_check <- mDR_learner(data = check,
+#                          id = "ID",
+#                          outcome = "Y",
+#                          exposure = "A",
+#                          outcome_observed_indicator = "G_obs",
+#                          splits = 4,
+#                          e_covariates = c("X1","X2","X3"),
+#                          e_method = "Parametric",
+#                          e_SL_lib = c("SL.lm"),
+#                          out_method = "Parametric",
+#                          out_covariates = c("X1","X2","X3"),
+#                          out_SL_lib = c("SL.lm"),
+#                          g_covariates = c("X1","X2","X3"),
+#                          g_method = "Super learner",
+#                          g_SL_lib = c("SL.lm"),
+#                          pse_method = "Parametric",
+#                          pse_covariates = c("X1"),
+#                          pse_SL_lib = c("SL.lm"),
+#                          newdata = check)
 # 
 # mDR_check <- mDR_learner(data = check,
 #                          id = "ID",
