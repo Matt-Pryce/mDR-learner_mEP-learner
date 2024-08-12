@@ -34,18 +34,22 @@ library(mice)
 #' @param out_covariates  List containing the names of the variables to be input into each outcome model
 #' @param out_SL_lib Library to be used in super learner if selected
 #' @param out_SL_strat Indicator for if stratification should be used in the super learner CV (stratifies outcomes - Only use if outcome binary)
+#' @param g_method Statistical technique used to run the missingness model
+#' @param g_covariates List containing the names of the variables to be input into the missingness model, excluding exposure
+#' @param g_SL_lib Library to be used in super learner if selected for missingness model
 #' @param imp_covariates Covariates to be used in SL imputation model if SL imputation used
 #' @param imp_SL_lib SL libaray for imputation model if SL imputation used
 #' @param imp_SL_strat Whether SL CV folds are stratified in the imputation model if SL imputation used  
 #' @param nuisance_estimates_input Indicator for whether nuisance estimates provided
 #' @param o_0_pred Variable name for unexposed outcome predictions (if provided)
 #' @param o_1_pred Variable name for exposed outcome predictions (if provided)
+#' @param g_pred Variable name for censoring predictions (if provided)
 #' @param newdata New data to create predictions for
 
 #' @return A list containing: CATE estimates, a dataset used to train the learner, outcome models (if run) 
 
 
-T_learner <- function(analysis = c("Complete case","SL imputation"),
+T_learner <- function(analysis = c("Complete case","SL imputation","IPCW"),
                       data,
                       id,
                       outcome,
@@ -54,11 +58,15 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
                       out_method = c("Parametric","Random forest","Super Learner"),
                       out_covariates,
                       out_SL_lib,
+                      g_method = c("Parametric","Random forest","Super Learner"),
+                      g_covariates = c(),
+                      g_SL_lib,
                       imp_covariates = c(),
                       imp_SL_lib,
                       nuisance_estimates_input = 0,
                       o_0_pred = NA,
                       o_1_pred = NA,
+                      g_pred = NA,
                       newdata
 ){
   
@@ -75,9 +83,11 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
                                 exposure = exposure,
                                 outcome_observed_indicator = outcome_observed_indicator,
                                 out_covariates = out_covariates,
+                                g_covariates = g_covariates,
                                 imp_covariates = imp_covariates,
                                 o_0_pred = o_0_pred,
                                 o_1_pred = o_1_pred,
+                                g_pred = g_pred,
                                 newdata = newdata
   )
   
@@ -93,13 +103,34 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
                               Y_bin = clean_data$Y_bin,
                               Y_cont = clean_data$Y_cont)
   }
-  else {
+  
+  
+  #----------------------------------#
+  #--- IPCW weighting on outcomes ---#    Only viable for continous outcomes atm
+  #----------------------------------#
+  if (analysis == "IPCW" & nuisance_estimates_input == 0){
+    analysis_data <- nuis_mod(model = "IPCW",
+                              data = clean_data$data,
+                              method = g_method,
+                              covariates = g_covariates,
+                              SL_lib = g_SL_lib,
+                              pred_data = clean_data,
+                              Y_bin = clean_data$Y_bin,
+                              Y_cont = clean_data$Y_cont)
+    analysis_data <- subset(analysis_data,is.na(analysis_data$Y)==0)
+  }
+  
+  
+  #---------------------------#
+  #--- Non imputation/IPCW ---#
+  #---------------------------#
+  
+  if (analysis == "Complete case"){
     analysis_data <- clean_data$data
-    analysis_data <- subset(analysis_data,analysis_data$G==1) 
+    analysis_data <- subset(analysis_data,is.na(analysis_data$Y)==0)
   }
 
-  
-  
+
   #------------------------------#
   #--- Running outcome models ---#
   #------------------------------#
@@ -114,7 +145,7 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
                                Y_cont = clean_data$Y_cont,
                                pred_data = clean_data$newdata)
   }
-  
+
 
   #-------------------------------#
   #--- Creating CATE estimates ---#
@@ -145,9 +176,9 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
 
 
 ###############################################################
-
-# #Example 
-# T_check <- T_learner(analysis = "Complete case",
+# 
+# #Example
+# T_check <- T_learner(analysis = "IPCW",
 #                      data = check,
 #                      id = "ID",
 #                      outcome = "Y",
@@ -156,10 +187,13 @@ T_learner <- function(analysis = c("Complete case","SL imputation"),
 #                      out_method = "Super learner",
 #                      out_covariates = c("X1","X2","X3"),
 #                      out_SL_lib = c("SL.lm"),
+#                      g_covariates = c("X1","X2","X3","X4","X5","X6"),
+#                      g_method = "Super learner",
+#                      g_SL_lib = c("SL.mean","SL.lm"),
 #                      imp_covariates = c("X3","X5","X6"),
 #                      imp_SL_lib = c("SL.lm"),
 #                      newdata = check)
-# 
+
 # T_check <- T_learner(analysis = "Complete case",
 #                      data = check,
 #                      id = "ID",
