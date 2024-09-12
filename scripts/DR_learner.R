@@ -239,7 +239,6 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
         }
       )
 
-
       #--- Running nuisance models & obtaining predictions ---#
       #Outcome models
       tryCatch(
@@ -270,7 +269,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
                                      SL_lib = e_SL_lib,
                                      pred_data = po_e_data)
         },
-        #if an error occurs, tell me the error
+        # if an error occurs, tell me the error
         error=function(e) {
           stop(paste("An error occured in propensity score model function in split ",i,sep=""))
           print(e)
@@ -403,7 +402,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
 
 ###############################################################
 # 
-# # #Example
+# #Example
 # DR_check <- DR_learner(analysis = "mDR-learner",
 #                        data = check,
 #                        id = "ID",
