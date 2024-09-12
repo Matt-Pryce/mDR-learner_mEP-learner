@@ -386,8 +386,16 @@ nuis_mod <- function(model,
     else if (method == "Super learner"){
       pred <- predict(mod, as.data.frame(pred_data))$pred
     }
+    
+    #Adding in check for estimates violating positivity
+    if (model == "Propensity score" & (min(pred) == 0 | min(pred) == 1)){
+      stop("Propensity scores violated positivity")
+    } 
+    if (model == "Censoring" & min(pred) == 0){
+      stop("Censoring probabilities violated positivity")
+    } 
   }
-
+  
   if (model == "Pseudo outcome"){
     if (method == "Random forest"){
       pred_data_matrix <- as.matrix(subset(pred_data, select = c(covariates)))
