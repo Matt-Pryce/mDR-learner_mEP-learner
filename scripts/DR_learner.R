@@ -17,7 +17,6 @@ library(xgboost)
 library(reshape2)
 library(data.table)
 library(SuperLearner)
-library(mice)
 
 
 #######################################
@@ -82,6 +81,8 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
                        pse_SL_lib,
                        imp_covariates = c(),
                        imp_SL_lib,
+                       rf_CI = FALSE,
+                       num_boot = 200,
                        newdata
 ){
   if (analysis == "mDR-learner"){
@@ -370,11 +371,12 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
   }
 
   if (splits == 1 | splits == 10){
+    #Gaining estimates from all data estimates
     tryCatch(
       {
-        pse_model <- nuis_mod(model = "Pseudo outcome",
-                              data = po_data_all,
-                              method = pse_method,
+        pse_model <- nuis_mod(model = "Pseudo outcome",  
+                              data = po_data_all,        
+                              method = pse_method,        
                               covariates = pse_covariates,
                               SL_lib = pse_SL_lib,
                               pred_data = newdata)
@@ -385,14 +387,100 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
         print(e)
       }
     )
+    
+    
+    #--- Gaining CI's ---#
+    if (rf_CI == TRUE & pse_method == "Random forest"){
+      pse_n_rows <- nrow(po_data_all)
+      for (i in 1:num_boot){
+        # Randomly sample half the rows
+        set.seed(596967 + i)  # Set seed for reproducibility
+        random_indices <- sample(1:pse_n_rows, size = ceiling(pse_n_rows/2), replace = FALSE)
+        half_sample <- po_data_all[random_indices, ]
+        half_sample <- half_sample[order(half_sample$ID), ]
+
+        #Running final stage model
+        tuned_parameters <- pse_model$po_mod$tunable.params
+        tryCatch(
+          {
+            pse_model_hs <- nuis_mod(model = "Pseudo outcome - CI",    
+                                     data = half_sample,       
+                                     method = pse_method,        
+                                     covariates = pse_covariates,
+                                     SL_lib = pse_SL_lib,
+                                     pred_data = newdata,
+                                     CI_tuned_params = tuned_parameters)
+            
+            half_sample_est <- pse_model_hs
+          },
+          #if an error occurs, tell me the error
+          error=function(e) {
+            stop(paste("An error occured when fitting the pseudo outcome model in split ",i,sep=""))
+            print(e)
+          }
+        )
+
+        #Creating R and storing 
+        full_sample_est <- pse_model$po_pred
+        
+        R <- full_sample_est - half_sample_est
+        
+        if (i == 1){
+          R_data <- as.data.frame(R)
+        }
+        else {
+          R_data <- cbind(R_data,R)
+        }
+      }
+      
+      #Gaining variance of R per person
+      CI_n_rows <- nrow(pse_model$po_pred)
+      for (i in 1:CI_n_rows){
+        
+        sqrt_n <- sqrt(num_boot)
+        temp <-  sqrt_n * R_data[i,]
+        var <- apply(temp, MARGIN = 1, FUN = var)
+        SE <- sqrt(var)
+
+        LCI <- pse_model$po_pred[i,] - (1/sqrt_n)*SE*1.96
+        UCI <- pse_model$po_pred[i,] + (1/sqrt_n)*SE*1.96
+        
+        # temp <-  R_data[i,] 
+        # var <- apply(temp, MARGIN = 1, FUN = var)
+        # SE <- sqrt(var)
+        # 
+        # LCI <- pse_model$po_pred[i,] - SE*1.96   
+        # UCI <- pse_model$po_pred[i,] + SE*1.96   
+
+        if (i == 1){
+          LCI_data <- LCI
+          UCI_data <- UCI
+        }
+        else {
+          LCI_data <- append(LCI_data,LCI)
+          UCI_data <- append(UCI_data,UCI)
+        }
+      }
+    }
+    else if (rf_CI == TRUE & pse_method != "Random forest"){
+      return("Inappropriate pseudo-outcome regression method for obtaining CI's")
+    }
   }
 
   #-----------------------------#
   #--- Returning information ---#
   #-----------------------------#
   if (splits == 1 | splits == 10){
-    output <- list(CATE_est = pse_model$po_pred,
-                   data = po_data_all)
+    if (rf_CI != TRUE){
+      output <- list(CATE_est = pse_model$po_pred,
+                     data = po_data_all)
+    }
+    else if (rf_CI == TRUE){
+      output <- list(CATE_est = pse_model$po_pred,
+                     CATE_LCI = LCI_data,
+                     CATE_UCI = UCI_data,
+                     data = po_data_all)
+    }
   }
 
   return(output)
@@ -401,66 +489,42 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
 
 
 ###############################################################
+
+# load("~/PhD/DR_Missing_Paper/Simulations/Results/Final_12_08_24/Model_results/Spec1/scenario_1_output1.RData")
+# check <- model_info_list$i$sim_data_train
+# check_test <- model_info_list$i$sim_data_test
 # 
 # #Example
-# DR_check <- DR_learner(analysis = "mDR-learner",
+# DR_check <- DR_learner(analysis = "Available case",
 #                        data = check,
 #                        id = "ID",
 #                        outcome = "Y",
 #                        exposure = "A",
 #                        outcome_observed_indicator = "G_obs",
-#                        splits = 10,
+#                        splits = 1,
 #                        e_covariates = c("X1","X2","X3","X4","X5","X6"),
 #                        e_method = "Super learner",
 #                        e_SL_lib = c("SL.mean",
 #                                     "SL.lm"),
-#                        # "SL.glmnet_8", "SL.glmnet_9",
-#                        # "SL.glmnet_11"),
 #                        out_method = "Super learner",
 #                        out_covariates = c("X1","X2","X3","X4","X5","X6"),
 #                        out_SL_lib = c("SL.mean",
 #                                       "SL.lm"),
-#                        # "SL.glmnet_8", "SL.glmnet_9",
-#                        # "SL.glmnet_11", "SL.glmnet_12",
-#                        # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                        # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                        # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                        # "SL.svm_1",
-#                        # "SL.kernelKnn_4","SL.kernelKnn_10"),
 #                        g_covariates = c("X1","X2","X3","X4","X5","X6"),
 #                        g_method = "Super learner",
 #                        g_SL_lib = c("SL.mean",
-#                                     "SL.lm"),#,
-#                        # "SL.glmnet_8", "SL.glmnet_9",
-#                        # "SL.glmnet_11", "SL.glmnet_12",
-#                        # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                        # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                        # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                        # "SL.svm_1",
-#                        # "SL.kernelKnn_4","SL.kernelKnn_10"),
+#                                     "SL.lm"),
 #                        imp_covariates = c("X1","X2","X3","X4","X5","X6"),
 #                        imp_SL_lib = c("SL.mean",
-#                                       "SL.lm"),#,
-#                        # "SL.glmnet_8", "SL.glmnet_9",
-#                        # "SL.glmnet_11", "SL.glmnet_12",
-#                        # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                        # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                        # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                        # "SL.svm_1",
-#                        # "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        pse_method = "Super learner",
+#                                       "SL.lm"),
+#                        pse_method = "Random forest",
 #                        pse_covariates = c("X1","X2","X3","X4","X5","X6"),
 #                        pse_SL_lib = c("SL.mean",
 #                                       "SL.lm"),
-#                        # "SL.glmnet_8", "SL.glmnet_9",
-#                        # "SL.glmnet_11", "SL.glmnet_12",
-#                        # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                        # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                        # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                        # "SL.svm_1",
-#                        # "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        newdata = check)
-# 
+#                        newdata = check_test,
+#                        rf_CI = TRUE,
+#                        num_boot = 200)
+
 # DR_check <- DR_learner(analysis = "Complete case",
 #                        data = check,
 #                        id = "ID",
@@ -477,3 +541,10 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
 #                        pse_SL_lib = c("SL.lm"),
 #                        newdata = check)
 
+# "SL.glmnet_8", "SL.glmnet_9",
+# "SL.glmnet_11", "SL.glmnet_12",
+# "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+# "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+# "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+# "SL.svm_1",
+# "SL.kernelKnn_4","SL.kernelKnn_10"),
