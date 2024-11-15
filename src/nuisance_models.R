@@ -40,7 +40,8 @@ nuis_mod <- function(model,
                      SL_lib,
                      Y_bin,
                      Y_cont,
-                     pred_data
+                     pred_data,
+                     CI_tuned_params
 ){
   
   #------------------------------#
@@ -81,7 +82,7 @@ nuis_mod <- function(model,
       else if (model == "IPCW"){
         train_data <- as.data.frame(subset(data,select = c("G",covariates,"A")))
       }
-      else if (model == "Pseudo outcome"){
+      else if (model == "Pseudo outcome" | model == "Pseudo outcome - CI"){
         train_data <- data
       }
     },
@@ -236,8 +237,7 @@ nuis_mod <- function(model,
       }
     )
   }
-
-
+  
   if (model == "Propensity score" | model == "Censoring" | model == "Pseudo outcome" | model == "IPCW"){
     if (method == "Random forest"){
       if (model == "Propensity score"){
@@ -286,21 +286,48 @@ nuis_mod <- function(model,
         sums <- table(train_data$G)
         cv_folds <- min(10,sums[1],sums[2])
         mod <- SuperLearner(Y = train_data$G, X = data.frame(subset(train_data, select = c(covariates,"A"))),
-                              method = "method.NNLS",
-                              family = binomial(),
-                              cvControl = list(V = cv_folds, stratifyCV=TRUE),
-                              SL.library = SL_lib)
+                            method = "method.NNLS",
+                            family = binomial(),
+                            cvControl = list(V = cv_folds, stratifyCV=TRUE),
+                            SL.library = SL_lib)
       }
       else if (model == "Pseudo outcome"){
         mod <- SuperLearner(Y = train_data$pse_Y, X = data.frame(subset(train_data, select = covariates)),
-                               method = "method.NNLS",
-                               family = gaussian(),
-                               cvControl = list(V = 10, stratifyCV=FALSE),
-                               SL.library = SL_lib)
+                            method = "method.NNLS",
+                            family = gaussian(),
+                            cvControl = list(V = 10, stratifyCV=FALSE),
+                            SL.library = SL_lib)
       }
     }
   }
 
+  
+  if (model == "Pseudo outcome - CI"){
+    if (method == "Random forest"){
+      check <- CI_tuned_params
+      #Defining tuning parameter values
+      tuned_sample.fraction <- CI_tuned_params$sample.fraction
+      tuned_mtry <- CI_tuned_params$mtry
+      tuned_min.node.size <- CI_tuned_params$min.node.size
+      tuned_honesty.fraction <- CI_tuned_params$honesty.fraction
+      tuned_honesty.prune.leaves <- CI_tuned_params$honesty.prune.leaves
+      tuned_alpha <- CI_tuned_params$alpha
+      tuned_imbalance.penalty <- CI_tuned_params$imbalance.penalty
+      
+      X <- as.matrix(subset(train_data, select = covariates))
+      mod <- regression_forest(X, train_data$pse_Y,
+                               sample.fraction = tuned_sample.fraction,
+                               mtry = tuned_mtry,
+                               min.node.size = tuned_min.node.size,
+                               honesty.fraction = tuned_honesty.fraction,
+                               honesty.prune.leaves = tuned_honesty.prune.leaves,
+                               alpha = tuned_alpha,
+                               imbalance.penalty = tuned_imbalance.penalty)
+    }
+    else if (method == "Super learner"){
+      #Could be added
+    }
+  }
 
 
 
@@ -396,7 +423,7 @@ nuis_mod <- function(model,
     } 
   }
   
-  if (model == "Pseudo outcome"){
+  if (model == "Pseudo outcome" | model == "Pseudo outcome - CI"){
     if (method == "Random forest"){
       pred_data_matrix <- as.matrix(subset(pred_data, select = c(covariates)))
       pred <- predict(mod, pred_data_matrix)
@@ -437,6 +464,9 @@ nuis_mod <- function(model,
   else if (model == "Pseudo outcome"){
     output <- list(po_pred = pred,
                    po_mod = mod)
+  }
+  else if (model == "Pseudo outcome - CI"){
+    output <- pred$predictions
   }
 
   return(output)
