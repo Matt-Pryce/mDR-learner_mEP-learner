@@ -459,9 +459,9 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   )
 
   
-  #-----------------------------------------#
-  #--- Running pseudo outcome regression ---#
-  #-----------------------------------------#
+  #-----------------------#
+  #--- Generating CI's ---#
+  #-----------------------#
   
   if (rf_CI == TRUE & pse_method == "Random forest"){
     pse_n_rows <- nrow(po_data_all)
