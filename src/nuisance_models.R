@@ -304,7 +304,6 @@ nuis_mod <- function(model,
   
   if (model == "Pseudo outcome - CI"){
     if (method == "Random forest"){
-      check <- CI_tuned_params
       #Defining tuning parameter values
       tuned_sample.fraction <- CI_tuned_params$sample.fraction
       tuned_mtry <- CI_tuned_params$mtry
