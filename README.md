@@ -19,13 +19,12 @@ T-learner
   - If nuisance functions input, T-learner can only make predictions of input data 
   
 
-Supplementary materials
+""Supplementary materials""
 
 Simulation study
   - A script which can be run on a HPC is provided for DGP 1 (sample size 400)
-  - An example batchscript is also provided
-  - All parameter scripts and test datasets are also provided
+  - An example batchscript along with the parameter scripts and test datasets are also provided
 
 ACTG175 trial analysis
   - A script which can be run on a HPC is provided 
-  - We ran 50 iterations in order to obtain median CATE estimates
+  - 50 iterations were run to obtain median CATE estimates
