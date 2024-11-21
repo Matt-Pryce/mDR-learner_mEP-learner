@@ -1,0 +1,22 @@
+#!/bin/bash
+#SBATCH --job-name=Spec1    # Job name
+#SBATCH --mail-type=END,FAIL,ARRAY_TASKS          # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=lsh1800165@lshtm.ac.uk # Where to send mail
+#SBATCH --ntasks=1                    # Run on a single core
+#SBATCH -a 1-250
+#SBATCH --mem=12gb                     # Job memory request
+#SBATCH --time=06:00:00               # Time limit hrs:min:sec
+#SBATCH --output=Spec1.%A_%a.out
+#SBATCH --error=Spec1.%A_%a.err
+
+pwd; hostname; date
+
+echo "time started"
+
+date
+
+R CMD BATCH --no-restore sims_script_spec1.R sims_script_spec1_$[SLURM_ARRAY_TASK_ID].Rout
+
+echo "time ended"
+
+date
