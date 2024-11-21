@@ -19,7 +19,7 @@ T-learner
   - If nuisance functions input, T-learner can only make predictions of input data 
   
 
-"Supplementary materials"
+**Supplementary materials**
 
 Simulation study
   - A script which can be run on a HPC is provided for DGP 1 (sample size 400)
