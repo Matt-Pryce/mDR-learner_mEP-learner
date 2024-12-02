@@ -57,7 +57,6 @@ nuis_mod <- function(model,
         train_data1 <- subset(train_data1,select = c("Y",covariates))
       } 
       else if (model == "Outcome - MSE"){
-        
         train_data0 <- subset(data,data$A==0)
         train_data1 <- subset(data,data$A==1)
         if (Y_bin == 1){
@@ -321,7 +320,8 @@ nuis_mod <- function(model,
                                honesty.fraction = tuned_honesty.fraction,
                                honesty.prune.leaves = tuned_honesty.prune.leaves,
                                alpha = tuned_alpha,
-                               imbalance.penalty = tuned_imbalance.penalty)
+                               imbalance.penalty = tuned_imbalance.penalty,
+                               num.trees = 200)
     }
     else if (method == "Super learner"){
       #Could be added
