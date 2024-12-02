@@ -477,6 +477,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
     }
     else if (rf_CI == TRUE){
       output <- list(CATE_est = pse_model$po_pred,
+                     R_data = R_data,
                      CATE_LCI = LCI_data,
                      CATE_UCI = UCI_data,
                      data = po_data_all)
@@ -501,7 +502,7 @@ DR_check <- DR_learner(analysis = "mDR-learner",
                        outcome = "Y",
                        exposure = "A",
                        outcome_observed_indicator = "G_obs",
-                       splits = 10,
+                       splits = 1,
                        e_covariates = c("X1","X2","X3","X4","X5","X6"),
                        e_method = "Super learner",
                        e_SL_lib = c("SL.mean",
@@ -523,7 +524,7 @@ DR_check <- DR_learner(analysis = "mDR-learner",
                                       "SL.lm"),
                        newdata = check_test,
                        rf_CI = TRUE,
-                       num_boot = 200)
+                       num_boot = 10)
 
 # DR_check <- DR_learner(analysis = "Complete case",
 #                        data = check,
