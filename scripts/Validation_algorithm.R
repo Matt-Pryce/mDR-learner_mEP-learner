@@ -20,8 +20,8 @@ library(reshape2)
 library(data.table)
 library(SuperLearner)
 
-source("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/GitHub_rep/mDR-learner/src/Data_management_1tp.R")
-source("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/GitHub_rep/mDR-learner/src/nuisance_models.R")
+# source("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/GitHub_rep/mDR-learner/src/Data_management_1tp.R")
+# source("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/GitHub_rep/mDR-learner/src/nuisance_models.R")
 
 
 #Process
@@ -58,22 +58,26 @@ source("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical M
 
 
 
-debiased_MSE <- function(data,
-                    id,
-                    outcome,
-                    exposure,
-                    outcome_observed_indicator,
-                    CATE_est,
-                    splits = 10,
-                    e_method = c("Parametric","Random forest","Super Learner"),
-                    e_covariates,
-                    e_SL_lib,
-                    out_method = c("Parametric","Random forest","Super Learner"),
-                    out_covariates,
-                    out_SL_lib,
-                    g_method = c("Parametric","Random forest","Super Learner"),
-                    g_covariates,
-                    g_SL_lib
+debiased_MSE <- function(learner,
+                         data,
+                         id,
+                         outcome,
+                         exposure,
+                         outcome_observed_indicator,
+                         CATE_est,
+                         splits = 10,
+                         e_method = c("Parametric","Random forest","Super Learner"),
+                         e_covariates,
+                         e_SL_lib,
+                         out_method = c("Parametric","Random forest","Super Learner"),
+                         out_covariates,
+                         out_SL_lib,
+                         g_method = c("Parametric","Random forest","Super Learner"),
+                         g_covariates,
+                         g_SL_lib,
+                         pse_method = c("Parametric","Random forest","Super Learner"),
+                         pse_covariates,
+                         pse_SL_lib
 ){
   
   #--------------------#
@@ -190,10 +194,10 @@ debiased_MSE <- function(data,
           po_g_data <- subset(po_g_data, po_g_data$s == i)
           po_g_data <- as.matrix(subset(po_g_data, select = -c(s)))
           if (clean_data$Y_bin == 1){
-            po_data <- subset(analysis_data,select = c("ID","Y","A","G","CATE_est","s"))
+            po_data <- subset(analysis_data,select = c("ID","Y","A","G","CATE_est","s",pse_covariates))
           }
           else {
-            po_data <- subset(analysis_data,select = c("ID","Y","Y_norm","A","G","CATE_est","CATE_est_norm","s"))
+            po_data <- subset(analysis_data,select = c("ID","Y","Y_norm","A","G","CATE_est","CATE_est_norm",pse_covariates,"s"))
           }
           po_data <- subset(po_data,po_data$s == i)
         }
@@ -242,7 +246,7 @@ debiased_MSE <- function(data,
         print(e)
       }
     )
-    
+
     #Censoring model
     tryCatch(
       {
@@ -259,8 +263,8 @@ debiased_MSE <- function(data,
         print(e)
       }
     )
-    
-    
+
+
     #--- Collecting nuisance model predictions ---#
     tryCatch(
       {
@@ -275,7 +279,7 @@ debiased_MSE <- function(data,
         print(e)
       }
     )
-    
+
     #--- Collecting full test data with pseudo-outcomes ---#
     if (i==0){
       po_data_all <- po_data
@@ -285,205 +289,243 @@ debiased_MSE <- function(data,
     }
   }
 
-  #--- Beginning TMLE iterations ---#
-  MSE_data_list <- list()
-  MSE_est_list <- list()
-  MSE_model_list <- list()
-
-  MSE_conv <- 0
-  iter <- 1
-  while (MSE_conv == 0){
-    #Identifying up to date outcome functions
-    if (iter == 1){   #If first iteration, set current outcome estimates as the estimates from the nuisance models
-      po_data_all$cur_o_0_pred <- po_data_all$o_0_pred
-      po_data_all$cur_o_1_pred <- po_data_all$o_1_pred
-    }
-    else {  #If iteration > 1, set current outcome estimates as the updated predictions
-      po_data_all$cur_o_0_pred <- po_data_all$new_o_0_pred
-      po_data_all$cur_o_1_pred <- po_data_all$new_o_1_pred
-    }
-
-    #--- Creating clever covariates ---#
-    #H_A - Clever covariate based on observed exposure
-    if (clean_data$Y_bin == 1){
-      po_data_all <- po_data_all %>%  mutate(H_A = case_when(A == 0 ~ -(1/((1-e_pred)*g_pred))*(CATE_est - cur_o_1_pred + cur_o_0_pred),
-                                                             A == 1 ~ (1/(e_pred*g_pred))*(CATE_est - cur_o_1_pred + cur_o_0_pred),
-                                                             TRUE ~ as.numeric(NA)))
-    }
-    else {
-      po_data_all <- po_data_all %>%  mutate(H_A = case_when(A == 0 ~ -(1/((1-e_pred)*g_pred))*(CATE_est_norm - cur_o_1_pred + cur_o_0_pred),
-                                                             A == 1 ~ (1/(e_pred*g_pred))*(CATE_est_norm - cur_o_1_pred + cur_o_0_pred),
-                                                             TRUE ~ as.numeric(NA)))
-    }
-
-    #H_1 - Clever covariate if exposed
-    if (clean_data$Y_bin == 1){
-      po_data_all$H_1 <- (1/(po_data_all$e_pred*po_data_all$g_pred))*(po_data_all$CATE_est - po_data_all$cur_o_1_pred + po_data_all$cur_o_0_pred)
-    }
-    else {
-      po_data_all$H_1 <- (1/(po_data_all$e_pred*po_data_all$g_pred))*(po_data_all$CATE_est_norm - po_data_all$cur_o_1_pred + po_data_all$cur_o_0_pred)
-    }
-
-    #H_0 - Clever covariate if unexposed
-    if (clean_data$Y_bin == 1){
-      po_data_all$H_0 <- -(1/((1-po_data_all$e_pred)*po_data_all$g_pred))*(po_data_all$CATE_est - po_data_all$cur_o_1_pred + po_data_all$cur_o_0_pred)
-    }
-    else {
-      po_data_all$H_0 <- -(1/((1-po_data_all$e_pred)*po_data_all$g_pred))*(po_data_all$CATE_est_norm - po_data_all$cur_o_1_pred + po_data_all$cur_o_0_pred)
-    }
-
-
-    #--- Updating outcome functions ---#   
-    #Defining outcome prediction based on the observed treatment
-    po_data_all <- po_data_all %>%  mutate(cur_o_A_pred = case_when(A == 0 ~ cur_o_0_pred,
-                                                                    A == 1 ~ cur_o_1_pred,
-                                                                    TRUE ~ as.numeric(NA)))
-
-    #Running model to produce fluctuation parameter
-    fluc_mod <- glm(Y_norm ~ -1 + offset(qlogis(cur_o_A_pred)) + H_A, data=po_data_all, family=quasibinomial)
-
-    #Collecting fluctuation parameter
-    eps <- coef(fluc_mod)
-
-    #Creating updated outcome estimates
-    po_data_all$new_o_0_pred <- plogis(qlogis(po_data_all$cur_o_0_pred) + eps*po_data_all$H_0)
-    po_data_all$new_o_1_pred <- plogis(qlogis(po_data_all$cur_o_1_pred) + eps*po_data_all$H_1)
-
-    #Defining outcome prediction based on the observed treatment
-    po_data_all <- po_data_all %>%  mutate(new_o_A_pred = case_when(A == 0 ~ new_o_0_pred,
-                                                                    A == 1 ~ new_o_1_pred,
-                                                                    TRUE ~ as.numeric(NA)))
-
-
-    #--- Calculate MSE ---#   #Only for transformed version (i.e. Y_cont == 1)
-    tryCatch(
-      {
-        #Summing pseudo outcomes
-        MSE <-  mean((((po_data_all$CATE_est_norm - po_data_all$new_o_1_pred + po_data_all$new_o_0_pred)*(clean_data$max_Y-clean_data$min_Y))+clean_data$min_Y)^2)
-      },
-      #if an error occurs, tell me the error
-      error=function(e) {
-        stop("An error occured when calculating the MSE")
-        print(e)
+  if (learner == "DR-TMLE"){
+    #--- Beginning TMLE iterations ---#
+    MSE_data_list <- list()
+    MSE_est_list <- list()
+    MSE_model_list <- list()
+    
+    MSE_conv <- 0
+    iter <- 1
+    while (MSE_conv == 0){
+      #Identifying up to date outcome functions
+      if (iter == 1){   #If first iteration, set current outcome estimates as the estimates from the nuisance models
+        po_data_all$cur_o_0_pred <- po_data_all$o_0_pred
+        po_data_all$cur_o_1_pred <- po_data_all$o_1_pred
       }
-    )
-
-    #--- Storing models and data ---#
-    MSE_data_list <- append(MSE_data_list,list(po_data_all))
-    MSE_est_list <- append(MSE_est_list,list(MSE))
-
-    if (iter > 2){
-      if (abs((MSE_est_list[[iter]]-MSE_est_list[[iter-1]])/MSE_est_list[[iter-1]])<0.05 &
-          abs((MSE_est_list[[iter-1]]-MSE_est_list[[iter-2]])/MSE_est_list[[iter-2]])<0.05){
-        MSE_conv <- 1
+      else {  #If iteration > 1, set current outcome estimates as the updated predictions
+        po_data_all$cur_o_0_pred <- po_data_all$new_o_0_pred
+        po_data_all$cur_o_1_pred <- po_data_all$new_o_1_pred
       }
-    }
-    else {
-      MSE_conv <- 0
-    }
-
-    if (iter > 20){
-      return("MSE did no converge within 20 iterations")
+      
+      #--- Creating clever covariates ---#
+      #H_A - Clever covariate based on observed exposure
+      if (clean_data$Y_bin == 1){
+        po_data_all <- po_data_all %>%  mutate(H_A = case_when(A == 0 ~ -(1/((1-e_pred)*g_pred))*(CATE_est - cur_o_1_pred + cur_o_0_pred),
+                                                               A == 1 ~ (1/(e_pred*g_pred))*(CATE_est - cur_o_1_pred + cur_o_0_pred),
+                                                               TRUE ~ as.numeric(NA)))
+      }
+      else {
+        po_data_all <- po_data_all %>%  mutate(H_A = case_when(A == 0 ~ -(1/((1-e_pred)*g_pred))*(CATE_est_norm - cur_o_1_pred + cur_o_0_pred),
+                                                               A == 1 ~ (1/(e_pred*g_pred))*(CATE_est_norm - cur_o_1_pred + cur_o_0_pred),
+                                                               TRUE ~ as.numeric(NA)))
+      }
+      
+      #H_1 - Clever covariate if exposed
+      if (clean_data$Y_bin == 1){
+        po_data_all$H_1 <- (1/(po_data_all$e_pred*po_data_all$g_pred))*(po_data_all$CATE_est - po_data_all$cur_o_1_pred + po_data_all$cur_o_0_pred)
+      }
+      else {
+        po_data_all$H_1 <- (1/(po_data_all$e_pred*po_data_all$g_pred))*(po_data_all$CATE_est_norm - po_data_all$cur_o_1_pred + po_data_all$cur_o_0_pred)
+      }
+      
+      #H_0 - Clever covariate if unexposed
+      if (clean_data$Y_bin == 1){
+        po_data_all$H_0 <- -(1/((1-po_data_all$e_pred)*po_data_all$g_pred))*(po_data_all$CATE_est - po_data_all$cur_o_1_pred + po_data_all$cur_o_0_pred)
+      }
+      else {
+        po_data_all$H_0 <- -(1/((1-po_data_all$e_pred)*po_data_all$g_pred))*(po_data_all$CATE_est_norm - po_data_all$cur_o_1_pred + po_data_all$cur_o_0_pred)
+      }
+      
+      
+      #--- Updating outcome functions ---#   
+      #Defining outcome prediction based on the observed treatment
+      po_data_all <- po_data_all %>%  mutate(cur_o_A_pred = case_when(A == 0 ~ cur_o_0_pred,
+                                                                      A == 1 ~ cur_o_1_pred,
+                                                                      TRUE ~ as.numeric(NA)))
+      
+      #Running model to produce fluctuation parameter
+      fluc_mod <- glm(Y_norm ~ -1 + offset(qlogis(cur_o_A_pred)) + H_A, data=po_data_all, family=quasibinomial)
+      
+      #Collecting fluctuation parameter
+      eps <- coef(fluc_mod)
+      
+      #Creating updated outcome estimates
+      po_data_all$new_o_0_pred <- plogis(qlogis(po_data_all$cur_o_0_pred) + eps*po_data_all$H_0)
+      po_data_all$new_o_1_pred <- plogis(qlogis(po_data_all$cur_o_1_pred) + eps*po_data_all$H_1)
+      
+      #Defining outcome prediction based on the observed treatment
+      po_data_all <- po_data_all %>%  mutate(new_o_A_pred = case_when(A == 0 ~ new_o_0_pred,
+                                                                      A == 1 ~ new_o_1_pred,
+                                                                      TRUE ~ as.numeric(NA)))
+      
+      
+      #--- Calculate MSE ---#   #Only for transformed version (i.e. Y_cont == 1)
+      tryCatch(
+        {
+          #Summing pseudo outcomes
+          MSE <-  mean((((po_data_all$CATE_est_norm - po_data_all$new_o_1_pred + po_data_all$new_o_0_pred)*(clean_data$max_Y-clean_data$min_Y))+clean_data$min_Y)^2)
+        },
+        #if an error occurs, tell me the error
+        error=function(e) {
+          stop("An error occured when calculating the MSE")
+          print(e)
+        }
+      )
+      
+      #--- Storing models and data ---#
+      MSE_data_list <- append(MSE_data_list,list(po_data_all))
+      MSE_est_list <- append(MSE_est_list,list(MSE))
+      
+      if (iter > 2){
+        if (abs((MSE_est_list[[iter]]-MSE_est_list[[iter-1]])/MSE_est_list[[iter-1]])<0.05 &
+            abs((MSE_est_list[[iter-1]]-MSE_est_list[[iter-2]])/MSE_est_list[[iter-2]])<0.05){
+          MSE_conv <- 1
+        }
+      }
+      else {
+        MSE_conv <- 0
+      }
+      
+      if (iter > 20){
+        return("MSE did no converge within 20 iterations")
+      }
+      
+      #Updating iteration
+      iter <- iter + 1
     }
     
-    #Updating iteration
-    iter <- iter + 1
+    #--- Calculating SE & CIs ---#
     
-
-
-
+    #Transforming outcomes back to original scale
+    po_data_all$final_o_1_pred <- ((po_data_all$new_o_1_pred*(clean_data$max_Y-clean_data$min_Y))+clean_data$min_Y)
+    po_data_all$final_o_0_pred <- ((po_data_all$new_o_0_pred*(clean_data$max_Y-clean_data$min_Y))+clean_data$min_Y)
+    po_data_all$final_o_A_pred <- ((po_data_all$new_o_A_pred*(clean_data$max_Y-clean_data$min_Y))+clean_data$min_Y)
+    
+    #Set missing values to non-missing so we can calculate IF
+    po_data_all <- po_data_all %>% mutate_if(is.numeric, function(x) ifelse(is.na(x), 999, x))
+    
+    #Calculating IF
+    infl_fn <- (po_data_all$CATE_est - (po_data_all$final_o_1_pred - po_data_all$final_o_0_pred))^2 -
+      (2*(((po_data_all$A*po_data_all$G)/(po_data_all$e_pred*po_data_all$g_pred)) +
+            (((1-po_data_all$A)*po_data_all$G)/((1-po_data_all$e_pred)*po_data_all$g_pred))) *
+         (po_data_all$Y - po_data_all$final_o_A_pred) *
+         (po_data_all$CATE_est - po_data_all$final_o_1_pred + po_data_all$final_o_0_pred)) - MSE
+    
+    #Obtaining variance
+    sample_size <- length(infl_fn)
+    varHat.IC <- var(infl_fn, na.rm = TRUE)/sample_size
+    
+    #Calculating CI
+    MSE_LCI <- MSE - 1.96*sqrt(varHat.IC)
+    if (MSE_LCI<0){
+      MSE_LCI <- 0
+    }
+    MSE_UCI <- MSE + 1.96*sqrt(varHat.IC)
   }
 
-  #--- Calculating SE & CIs ---#
+  if (learner == "IPTW-IPCW"){
+    #Creating IPTW-IPCW weights
+    po_data_all <- po_data_all %>%  mutate(weight = case_when(A == 0 ~ -(1/((1-e_pred)*g_pred)),
+                                                              A == 1 ~ (1/(e_pred*g_pred)),
+                                                              TRUE ~ as.numeric(NA)))
 
-  #Transforming outcomes back to original scale
-  po_data_all$final_o_1_pred <- ((po_data_all$new_o_1_pred*(clean_data$max_Y-clean_data$min_Y))+clean_data$min_Y)
-  po_data_all$final_o_0_pred <- ((po_data_all$new_o_0_pred*(clean_data$max_Y-clean_data$min_Y))+clean_data$min_Y)
-  po_data_all$final_o_A_pred <- ((po_data_all$new_o_A_pred*(clean_data$max_Y-clean_data$min_Y))+clean_data$min_Y)
+    #Creating pseudo-outcomes
+    po_data_all$pse_Y <- po_data_all$Y * po_data_all$weight
 
-  #Set missing values to non-missing so we can calculate IF
-  po_data_all <- po_data_all %>% mutate_if(is.numeric, function(x) ifelse(is.na(x), 999, x))
+    #Regressing pseudo-outcomes against X
+    po_data_all_complete <- subset(po_data_all,is.na(po_data_all$Y) == 0)
+    pse_model <- nuis_mod(model = "Pseudo outcome",
+                          data = po_data_all_complete,
+                          method = pse_method,
+                          covariates = pse_covariates,
+                          SL_lib = pse_SL_lib,
+                          pred_data = po_data_all)
 
-  #Calculating IF
-  infl_fn <- (po_data_all$CATE_est - (po_data_all$final_o_1_pred - po_data_all$final_o_0_pred))^2 -
-    (2*(((po_data_all$A*po_data_all$G)/(po_data_all$e_pred*po_data_all$g_pred)) +
-          (((1-po_data_all$A)*po_data_all$G)/((1-po_data_all$e_pred)*po_data_all$g_pred))) *
-       (po_data_all$Y - po_data_all$final_o_A_pred) *
-       (po_data_all$CATE_est - po_data_all$final_o_1_pred + po_data_all$final_o_0_pred)) - MSE
+    #Obtaining predictions
+    po_data_all$pred_true <- as.vector(pse_model$po_pred)    #Only works with SL estimation
 
-  #Obtaining variance
-  sample_size <- length(infl_fn)
-  varHat.IC <- var(infl_fn, na.rm = TRUE)/sample_size
-
-  #Calculating CI
-  MSE_LCI <- MSE - 1.96*sqrt(varHat.IC)
-  if (MSE_LCI<0){
-    MSE_LCI <- 0
+    #Generating MSE estimate
+    MSE <- mean((po_data_all$pred_true - po_data_all$CATE_est)^2)
   }
-  MSE_UCI <- MSE + 1.96*sqrt(varHat.IC)
 
-  output <- list(MSE=MSE,
-                 MSE_LCI=MSE_LCI,
-                 MSE_UCI=MSE_UCI,
-                 MSE_list=MSE_est_list,
-                 Updated_data=MSE_data_list,
-                 Final_data=po_data_all)
+  if (learner == "DR-TMLE"){
+    output <- list(MSE=MSE,
+                   MSE_LCI=MSE_LCI,
+                   MSE_UCI=MSE_UCI,
+                   MSE_list=MSE_est_list,
+                   Updated_data=MSE_data_list,
+                   Final_data=po_data_all)
+  }
+  else if (learner == "IPTW-IPCW"){
+    output <- list(Final_data = po_data_all,
+                   MSE = MSE)
+  }
+
   return(output)
 }
 
 
-# out_cov_list <- c("age","wtkg","race","gender","hemo","homo","drugs","karnof","symptom","cd40","cd420","cd80","cd820","preanti","oprior")
-# imp_cov_list <- c("age","wtkg","race","gender","hemo","homo","drugs","karnof","symptom","cd40","cd420","cd80","cd820","preanti","oprior")
-# ps_cov_list <- c("age","wtkg","race","gender","hemo","homo","drugs","karnof","symptom","cd40","cd80","preanti","oprior")
+out_cov_list <- c("age","wtkg","race","gender","hemo","homo","drugs","karnof","symptom","cd40","cd420","cd80","cd820","preanti","oprior")
+imp_cov_list <- c("age","wtkg","race","gender","hemo","homo","drugs","karnof","symptom","cd40","cd420","cd80","cd820","preanti","oprior")
+ps_cov_list <- c("age","wtkg","race","gender","hemo","homo","drugs","karnof","symptom","cd40","cd80","preanti","oprior")
+pse_cov_list <- out_cov_list
 # 
 # #Note: To run, load data, create tau, run cov lists and libs
 # 
 # 
-# out_lib <- c("SL.mean",
-#              "SL.lm")#,
-#              # "SL.glmnet_8", "SL.glmnet_9",
-#              # "SL.glmnet_11", "SL.glmnet_12",
-#              # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#              # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#              # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#              # "SL.svm_1",
-#              # "SL.kernelKnn_4","SL.kernelKnn_10")
+out_lib <- c("SL.mean",
+             "SL.lm",
+             "SL.glmnet_8", "SL.glmnet_9",
+             "SL.glmnet_11", "SL.glmnet_12",
+             "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+             "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+             "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+             "SL.svm_1",
+             "SL.kernelKnn_4","SL.kernelKnn_10")
 # 
-# e_lib <- c("SL.mean",
-#            "SL.glm")#,
-#            # "SL.glmnet_8", "SL.glmnet_9",
-#            # "SL.glmnet_11", "SL.glmnet_12",
-#            # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#            # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#            # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#            # "SL.svm_1",
-#            # "SL.kernelKnn_4","SL.kernelKnn_10")
+e_lib <- c("SL.mean",
+           "SL.glm",
+           "SL.glmnet_8", "SL.glmnet_9",
+           "SL.glmnet_11", "SL.glmnet_12",
+           "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+           "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+           "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+           "SL.svm_1",
+           "SL.kernelKnn_4","SL.kernelKnn_10")
 # 
-# g_lib <- c("SL.mean",
-#            "SL.glm")#,
-#            # "SL.glmnet_8", "SL.glmnet_9",
-#            # "SL.glmnet_11", "SL.glmnet_12",
-#            # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#            # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#            # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#            # "SL.svm_1",
-#            # "SL.kernelKnn_4","SL.kernelKnn_10")
-# 
-# debiased_MSE_IF_check <- debiased_MSE(data = ACTG175_data,
-#                                       id = "pidnum",
-#                                       outcome = "cd496",
-#                                       exposure = "treat",
-#                                       outcome_observed_indicator = "r",
-#                                       CATE_est = "tau",
-#                                       splits = 10,
-#                                       e_method = "Parametric",
-#                                       e_covariates = ps_cov_list,
-#                                       e_SL_lib = e_lib,
-#                                       out_method = "Super learner",
-#                                       out_covariates = out_cov_list,
-#                                       out_SL_lib = out_lib,
-#                                       g_method = "Parametric",
-#                                       g_covariates = imp_cov_list,
-#                                       g_SL_lib = g_lib)
+g_lib <- c("SL.mean",
+           "SL.glm",
+           "SL.glmnet_8", "SL.glmnet_9",
+           "SL.glmnet_11", "SL.glmnet_12",
+           "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+           "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+           "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+           "SL.svm_1",
+           "SL.kernelKnn_4","SL.kernelKnn_10")
+
+load("~/PhD/DR_Missing_Paper/Data_example/Data/ACTG175_data_with_med_ests.RData")
+
+debiased_MSE_IF_check <- debiased_MSE(learner = "IPTW-IPCW",
+                                      data = ACTG175_data_with_med_est,
+                                      id = "pidnum",
+                                      outcome = "cd496",
+                                      exposure = "treat",
+                                      outcome_observed_indicator = "r",
+                                      CATE_est = "mEP_pse1",
+                                      splits = 10,
+                                      e_method = "Super learner",
+                                      e_covariates = ps_cov_list,
+                                      e_SL_lib = e_lib,
+                                      out_method = "Parametric",
+                                      out_covariates = out_cov_list,
+                                      out_SL_lib = out_lib,
+                                      g_method = "Super learner",
+                                      g_covariates = imp_cov_list,
+                                      g_SL_lib = g_lib,
+                                      pse_method = "Super learner",
+                                      pse_covariates = pse_cov_list,
+                                      pse_SL_lib = out_lib)
+
 
 
