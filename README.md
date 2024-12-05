@@ -1,12 +1,12 @@
-# mDR-learner
+# mDR-learner/mEP-learner
 Implements the missing outcome extensions of the DR-learner and EP-learner. 
 
-mDR-learner 
+mDR-learner/mEP-learner
   - Nuisance parameters can be estimated inside function by specifying model
     parameters or they can be estimated outside the function and input. 
   - Crossfitting can be implemented using 10 CV validation (or not used)
 
-DR-learner 
+DR-learner/EP-learner
   - Allows for missing outcomes to be imputed (using Parametric/RF/SL model)
   - Alternatively, can run using only complete cases or available cases 
   - If want to fit outcome imputation outside function then run Complete case 
@@ -15,7 +15,7 @@ DR-learner
     instead treats it as a complete case analysis
     
 T-learner
-  - Same notes as DR-learner
+  - Same notes as DR-learner/EP-learner
   - If nuisance functions input, T-learner can only make predictions of input data 
   
 
