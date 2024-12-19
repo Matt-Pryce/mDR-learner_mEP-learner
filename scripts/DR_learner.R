@@ -360,7 +360,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       }
     )
 
-
+    
     #--- Collecting full test data with pseudo-outcomes ---#
     if (i==0){
       po_data_all <- po_data
@@ -369,7 +369,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       po_data_all <- rbind(po_data_all,po_data)
     }
   }
-
+  
   if (splits == 1 | splits == 10){
     #Gaining estimates from all data estimates
     tryCatch(
@@ -423,7 +423,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
         #Creating R and storing
         full_sample_est <- pse_model$po_pred
 
-        R <- full_sample_est - half_sample_est
+        R <- as.numeric(full_sample_est$predictions - half_sample_est)
 
         if (i == 1){
           R_data <- as.data.frame(R)
@@ -436,31 +436,42 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       #Gaining variance of R per person
       CI_n_rows <- nrow(pse_model$po_pred)
       for (i in 1:CI_n_rows){
-
-        sqrt_n <- sqrt(num_boot)
-        temp <-  sqrt_n * R_data[i,]
-        var <- apply(temp, MARGIN = 1, FUN = var)
+        temp <- unlist(R_data[i,])
+        var <- var(temp)
         SE <- sqrt(var)
-
-        LCI <- pse_model$po_pred[i,] - (1/sqrt_n)*SE*1.96
-        UCI <- pse_model$po_pred[i,] + (1/sqrt_n)*SE*1.96
-
-        # temp <-  R_data[i,]
-        # var <- apply(temp, MARGIN = 1, FUN = var)
-        # SE <- sqrt(var)
-        #
-        # LCI <- pse_model$po_pred[i,] - SE*1.96
-        # UCI <- pse_model$po_pred[i,] + SE*1.96
-
+        
         if (i == 1){
-          LCI_data <- LCI
-          UCI_data <- UCI
+          var_list <- var
+          SE_list <- SE
         }
         else {
-          LCI_data <- append(LCI_data,LCI)
-          UCI_data <- append(UCI_data,UCI)
+          var_list <- c(var_list,var)
+          SE_list <- c(SE_list,SE)
         }
       }
+      
+      #Creating normalised matrix
+      normalized <- abs(R_data)/(sqrt(var_list))
+
+      #Identifying column maxs
+      CI_n_cols <- ncol(normalized)
+      for (i in 1:CI_n_cols){
+        temp <- unlist(R_data[,i])
+        colmax <- max(temp)
+        
+        if (i == 1){
+          colmax_list <- colmax
+        }
+        else {
+          colmax_list <- c(colmax_list,colmax)
+        }
+      }
+      
+      #Creating S-star
+      S_star <- quantile(colmax_list, 0.95)
+
+      LCI <-  pse_model$po_pred$predictions - sqrt(var_list)*S_star
+      UCI <-  pse_model$po_pred$predictions + sqrt(var_list)*S_star
     }
     else if (rf_CI == TRUE & pse_method != "Random forest"){
       return("Inappropriate pseudo-outcome regression method for obtaining CI's")
@@ -477,54 +488,53 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
     }
     else if (rf_CI == TRUE){
       output <- list(CATE_est = pse_model$po_pred,
-                     R_data = R_data,
-                     CATE_LCI = LCI_data,
-                     CATE_UCI = UCI_data,
+                     CATE_LCI = LCI,
+                     CATE_UCI = UCI,
                      data = po_data_all)
     }
   }
-
+ 
   return(output)
 }
 
 
 
 ###############################################################
-
-load("~/PhD/DR_Missing_Paper/Simulations/Results/Final_22_03_24/Scenario_1/Scenario_1_output1.RData")
-check <- model_info_list$i$sim_data_train
-check_test <- model_info_list$i$sim_data_test
-
-#Example
-DR_check <- DR_learner(analysis = "mDR-learner",
-                       data = check,
-                       id = "ID",
-                       outcome = "Y",
-                       exposure = "A",
-                       outcome_observed_indicator = "G_obs",
-                       splits = 1,
-                       e_covariates = c("X1","X2","X3","X4","X5","X6"),
-                       e_method = "Super learner",
-                       e_SL_lib = c("SL.mean",
-                                    "SL.lm"),
-                       out_method = "Super learner",
-                       out_covariates = c("X1","X2","X3","X4","X5","X6"),
-                       out_SL_lib = c("SL.mean",
-                                      "SL.lm"),
-                       g_covariates = c("X1","X2","X3","X4","X5","X6"),
-                       g_method = "Super learner",
-                       g_SL_lib = c("SL.mean",
-                                    "SL.lm"),
-                       imp_covariates = c("X1","X2","X3","X4","X5","X6"),
-                       imp_SL_lib = c("SL.mean",
-                                      "SL.lm"),
-                       pse_method = "Random forest",
-                       pse_covariates = c("X1","X2","X3","X4","X5","X6"),
-                       pse_SL_lib = c("SL.mean",
-                                      "SL.lm"),
-                       newdata = check_test,
-                       rf_CI = TRUE,
-                       num_boot = 10)
+# 
+# load("~/PhD/DR_Missing_Paper/Simulations/Results/Final_22_03_24/Scenario_1/Scenario_1_output1.RData")
+# check <- model_info_list$i$sim_data_train
+# check_test <- model_info_list$i$sim_data_test
+# 
+# #Example
+# DR_check <- DR_learner(analysis = "mDR-learner",
+#                        data = check,
+#                        id = "ID",
+#                        outcome = "Y",
+#                        exposure = "A",
+#                        outcome_observed_indicator = "G_obs",
+#                        splits = 1,
+#                        e_covariates = c("X1","X2","X3","X4","X5","X6"),
+#                        e_method = "Super learner",
+#                        e_SL_lib = c("SL.mean",
+#                                     "SL.lm"),
+#                        out_method = "Super learner",
+#                        out_covariates = c("X1","X2","X3","X4","X5","X6"),
+#                        out_SL_lib = c("SL.mean",
+#                                       "SL.lm"),
+#                        g_covariates = c("X1","X2","X3","X4","X5","X6"),
+#                        g_method = "Super learner",
+#                        g_SL_lib = c("SL.mean",
+#                                     "SL.lm"),
+#                        imp_covariates = c("X1","X2","X3","X4","X5","X6"),
+#                        imp_SL_lib = c("SL.mean",
+#                                       "SL.lm"),
+#                        pse_method = "Random forest",
+#                        pse_covariates = c("X1","X2","X3","X4","X5","X6"),
+#                        pse_SL_lib = c("SL.mean",
+#                                       "SL.lm"),
+#                        newdata = check_test,
+#                        rf_CI = TRUE,
+#                        num_boot = 2000)
 
 # DR_check <- DR_learner(analysis = "Complete case",
 #                        data = check,
