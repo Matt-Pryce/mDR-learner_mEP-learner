@@ -49,7 +49,7 @@ library(mice)
 #' @return A list containing: CATE estimates, a dataset used to train the learner, outcome models (if run) 
 
 
-T_learner <- function(analysis = c("Complete case","SL imputation","IPCW"),
+T_learner <- function(analysis = c("Complete case","SL imputation"),
                       data,
                       id,
                       outcome,
@@ -58,9 +58,6 @@ T_learner <- function(analysis = c("Complete case","SL imputation","IPCW"),
                       out_method = c("Parametric","Random forest","Super Learner"),
                       out_covariates,
                       out_SL_lib,
-                      g_method = c("Parametric","Random forest","Super Learner"),
-                      g_covariates = c(),
-                      g_SL_lib,
                       imp_covariates = c(),
                       imp_SL_lib,
                       nuisance_estimates_input = 0,
@@ -105,25 +102,9 @@ T_learner <- function(analysis = c("Complete case","SL imputation","IPCW"),
   }
   
   
-  #----------------------------------#
-  #--- IPCW weighting on outcomes ---#    Only viable for continous outcomes atm
-  #----------------------------------#
-  if (analysis == "IPCW" & nuisance_estimates_input == 0){
-    analysis_data <- nuis_mod(model = "IPCW",
-                              data = clean_data$data,
-                              method = g_method,
-                              covariates = g_covariates,
-                              SL_lib = g_SL_lib,
-                              pred_data = clean_data,
-                              Y_bin = clean_data$Y_bin,
-                              Y_cont = clean_data$Y_cont)
-    analysis_data <- subset(analysis_data,is.na(analysis_data$Y)==0)
-  }
-  
-  
-  #---------------------------#
-  #--- Non imputation/IPCW ---#
-  #---------------------------#
+  #----------------------#
+  #--- Non imputation ---#
+  #----------------------#
   
   if (analysis == "Complete case"){
     analysis_data <- clean_data$data
@@ -137,13 +118,13 @@ T_learner <- function(analysis = c("Complete case","SL imputation","IPCW"),
 
   if (nuisance_estimates_input == 0){
     outcome_models <- nuis_mod(model = "Outcome",
-                               data = analysis_data,
-                               method = out_method,
-                               covariates = out_covariates,
-                               SL_lib = out_SL_lib,
-                               Y_bin = clean_data$Y_bin,
-                               Y_cont = clean_data$Y_cont,
-                               pred_data = clean_data$newdata)
+                                 data = analysis_data,
+                                 method = out_method,
+                                 covariates = out_covariates,
+                                 SL_lib = out_SL_lib,
+                                 Y_bin = clean_data$Y_bin,
+                                 Y_cont = clean_data$Y_cont,
+                                 pred_data = clean_data$newdata) 
   }
 
 
@@ -177,23 +158,12 @@ T_learner <- function(analysis = c("Complete case","SL imputation","IPCW"),
 
 ###############################################################
 # 
-# #Example
-# T_check <- T_learner(analysis = "IPCW",
-#                      data = check,
-#                      id = "ID",
-#                      outcome = "Y",
-#                      exposure = "A",
-#                      outcome_observed_indicator = "G_obs",
-#                      out_method = "Super learner",
-#                      out_covariates = c("X1","X2","X3"),
-#                      out_SL_lib = c("SL.lm"),
-#                      g_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                      g_method = "Super learner",
-#                      g_SL_lib = c("SL.mean","SL.lm"),
-#                      imp_covariates = c("X3","X5","X6"),
-#                      imp_SL_lib = c("SL.lm"),
-#                      newdata = check)
+#Example
 
+# load("~/PhD/DR_Missing_Paper/Simulations/Results/Final_22_03_24/Scenario_1/Scenario_1_output1.RData")
+# check <- model_info_list$i$sim_data_train
+# check_test <- model_info_list$i$sim_data_test
+# 
 # T_check <- T_learner(analysis = "Complete case",
 #                      data = check,
 #                      id = "ID",
