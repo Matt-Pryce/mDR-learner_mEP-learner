@@ -95,12 +95,14 @@ data_manage_1tp <- function(data,
       
       if (nuisance_estimates_input == 0){
         #For all analysis choices and both learners
-        vars <- append(vars,out_covariates)
+        if (learner != "IPTW-IPCW"){
+          vars <- append(vars,out_covariates)
+        }
         if (learner == "DR-learner" | learner == "EP-learner"){
           vars <- append(vars,e_covariates)
           vars <- append(vars,pse_covariates)
         }
-        if (learner == "mDR-learner" | learner == "mEP-learner"){
+        if (learner == "mDR-learner" | learner == "mEP-learner" | learner == "IPTW-IPCW"){
           vars <- append(vars,e_covariates)
           vars <- append(vars,g_covariates)
           vars <- append(vars,pse_covariates)
@@ -114,22 +116,21 @@ data_manage_1tp <- function(data,
           if (analysis_type == "SL imputation"){
             vars <- append(vars,imp_covariates)
           }
-          if (analysis_type == "IPCW"){
-            vars <- append(vars,g_covariates)
-          }
         }
         vars <- vars[!duplicated(vars)]
       }
 
-      if (nuisance_estimates_input == 1){    #Cannot handle IPCW or imputation
-        vars <- append(vars,o_0_pred)
-        vars <- append(vars,o_1_pred)
+      if (nuisance_estimates_input == 1){
 
+        if (learner != "IPTW-IPCW"){
+          vars <- append(vars,o_0_pred)
+          vars <- append(vars,o_1_pred)
+        }
         if (learner == "DR-learner" | learner == "EP-learner"){
           vars <- append(vars,pse_covariates)
           vars <- append(vars,e_pred)
         }
-        if (learner == "mDR-learner" | learner == "mEP-learner"){
+        if (learner == "mDR-learner" | learner == "mEP-learner" | learner == "IPTW-IPCW"){
           vars <- append(vars,pse_covariates)
           vars <- append(vars,e_pred)
           vars <- append(vars,g_pred)
@@ -159,13 +160,15 @@ data_manage_1tp <- function(data,
       if (learner == "debiased_MSE"){
         names(data)[names(data) == CATE_est] <- "CATE_est"
       }
-      if (nuisance_estimates_input == 1){  #Cannot handle IPCW or imputation 
-        names(data)[names(data) == o_0_pred] <- "o_0_pred"
-        names(data)[names(data) == o_1_pred] <- "o_1_pred"
+      if (nuisance_estimates_input == 1){  #Cannot imputation
+        if (learner != "IPTW-IPCW"){
+          names(data)[names(data) == o_0_pred] <- "o_0_pred"
+          names(data)[names(data) == o_1_pred] <- "o_1_pred"
+        }
         if (learner == "DR-learner" | learner == "EP-learner"){
           names(data)[names(data) == e_pred] <- "e_pred"
         }
-        if (learner == "mDR-learner" | learner == "mEP-learner"){
+        if (learner == "mDR-learner" | learner == "mEP-learner" | learner == "IPTW-IPCW"){
           names(data)[names(data) == e_pred] <- "e_pred"
           names(data)[names(data) == g_pred] <- "g_pred"
         }
