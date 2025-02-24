@@ -55,7 +55,7 @@ library(SuperLearner)
 #'         pseudo-outcome predictions (if splits 3) 
 
 
-DR_learner <- function(analysis = c("Complete case","Available case","SL imputation","IPCW","mDR-learner"),
+DR_learner <- function(analysis = c("Complete case","Available case","SL imputation","mDR-learner"),
                        data,
                        id,
                        outcome,
@@ -127,24 +127,9 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
   }
   
   
-  #----------------------------------#
-  #--- IPCW weighting on outcomes ---#    Only viable for continous outcomes atm
-  #----------------------------------#
-  if (analysis == "IPCW" & nuisance_estimates_input == 0){
-    analysis_data <- nuis_mod(model = "IPCW",
-                              data = clean_data$data,
-                              method = g_method,
-                              covariates = g_covariates,
-                              SL_lib = g_SL_lib,
-                              pred_data = clean_data,
-                              Y_bin = clean_data$Y_bin,
-                              Y_cont = clean_data$Y_cont)
-  }
-  
-  
-  #---------------------------#
-  #--- Non imputation/IPCW ---#
-  #---------------------------#
+  #----------------------#
+  #--- Non imputation ---#
+  #----------------------#
   
   if (analysis == "Complete case"){
     analysis_data <- clean_data$data
