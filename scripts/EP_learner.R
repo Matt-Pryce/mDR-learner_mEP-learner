@@ -59,7 +59,7 @@ library(Sieve)
 #'         pseudo-outcome predictions (if splits 4) 
 
 
-EP_learner <- function(analysis = c("Complete case","Available case","SL imputation","IPCW","mEP-learner"),
+EP_learner <- function(analysis = c("Complete case","Available case","SL imputation","mEP-learner"),
                        data,
                        id,
                        outcome,
@@ -137,24 +137,9 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   }
   
 
-  #----------------------------------#
-  #--- IPCW weighting on outcomes ---#    Only viable for continous outcomes atm
-  #----------------------------------#
-  if (analysis == "IPCW" & nuisance_estimates_input == 0){
-    analysis_data <- nuis_mod(model = "IPCW",
-                              data = clean_data$data,
-                              method = g_method,
-                              covariates = g_covariates,
-                              SL_lib = g_SL_lib,
-                              pred_data = clean_data,
-                              Y_bin = clean_data$Y_bin,
-                              Y_cont = clean_data$Y_cont)
-  }
-  
-
-  #---------------------------#
-  #--- Non imputation/IPCW ---#
-  #---------------------------#
+  #----------------------#
+  #--- Non imputation ---#
+  #----------------------#
   
   if (analysis == "Complete case"){
     analysis_data <- clean_data$data
@@ -362,7 +347,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   #--- Establishing Sieve ---#
   #--------------------------#
 
-  if (analysis == "Available case" | analysis == "IPCW" |analysis == "mEP-learner"){
+  if (analysis == "Available case" |analysis == "mEP-learner"){
     sieve_data <- subset(po_data_all,is.na(po_data_all$Y)==0)   #Only update observed individuals
   }
   else if (analysis == "Complete case" | analysis == "SL imputation"){  
@@ -389,7 +374,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   sieve_basis_train <- sieve_basis * ((sieve_data$A==1) - (sieve_data$A == 0))
   o_A_pred <- (sieve_data$A == 1) * (sieve_data$o_1_pred) + (sieve_data$A == 0) * (sieve_data$o_0_pred)
 
-  if (analysis == "Complete case" | analysis == "Available case" | analysis == "IPCW" | analysis == "SL imputation"){
+  if (analysis == "Complete case" | analysis == "Available case" | analysis == "SL imputation"){
     glmnet_fit <- glmnet::glmnet(x=sieve_basis_train, y=sieve_data$Y,
                                  offset = o_A_pred,
                                  weights = (sieve_data$A == 1)/sieve_data$e_pred + (sieve_data$A == 0)/(1-sieve_data$e_pred),
@@ -420,7 +405,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   sieve_data$o_1_pred_star <- sieve_data$o_1_pred + sieve_data$correction
   sieve_data$o_0_pred_star <- sieve_data$o_0_pred - sieve_data$correction
 
-  if (analysis == "Available case" | analysis == "IPCW" |analysis == "mEP-learner"){
+  if (analysis == "Available case" |analysis == "mEP-learner"){
     #Merging updated outcome preds with full dataset
     sieve_data_sub <- subset(sieve_data,select = c(ID,o_1_pred_star,o_0_pred_star))
     po_data_all <- merge(po_data_all,sieve_data_sub,by="ID",all.x = T)
