@@ -247,9 +247,9 @@ nuis_mod <- function(model,
       else if (model == "Pseudo outcome"){
         X <- as.matrix(subset(train_data, select = covariates))
         mod <- regression_forest(X, train_data$pse_Y,
-                                 # sample.fraction = 0.05,
+                                 #sample.fraction = 0.05,
                                  num.trees = 20000,
-                                 tune.parameters = c("sample.fraction","mtry", "min.node.size", "honesty.fraction", "honesty.prune.leaves", "alpha", "imbalance.penalty"),
+                                 #tune.parameters = c("sample.fraction","mtry", "min.node.size", "honesty.fraction", "honesty.prune.leaves", "alpha", "imbalance.penalty"), #
                                  ci.group.size = 1)
       }
     }
@@ -305,7 +305,7 @@ nuis_mod <- function(model,
   if (model == "Pseudo outcome - CI"){
     if (method == "Random forest"){
       #Defining tuning parameter values
-      tuned_sample.fraction <- CI_tuned_params$sample.fraction
+      tuned_sample.fraction <- CI_tuned_params$sample.fraction 
       tuned_mtry <- CI_tuned_params$mtry
       tuned_min.node.size <- CI_tuned_params$min.node.size
       tuned_honesty.fraction <- CI_tuned_params$honesty.fraction
@@ -315,14 +315,19 @@ nuis_mod <- function(model,
       
       X <- as.matrix(subset(train_data, select = covariates))
       mod <- regression_forest(X, train_data$pse_Y,
-                               sample.fraction = tuned_sample.fraction,
-                               mtry = tuned_mtry,
-                               min.node.size = tuned_min.node.size,
-                               honesty.fraction = tuned_honesty.fraction,
-                               honesty.prune.leaves = tuned_honesty.prune.leaves,
-                               alpha = tuned_alpha,
-                               imbalance.penalty = tuned_imbalance.penalty,
+                               #sample.fraction = 0.1,#tuned_sample.fraction * 2,
+                               # mtry = tuned_mtry,
+                               # min.node.size = tuned_min.node.size,
+                               # honesty.fraction = tuned_honesty.fraction,
+                               # honesty.prune.leaves = tuned_honesty.prune.leaves,
+                               # alpha = tuned_alpha,
+                               # imbalance.penalty = tuned_imbalance.penalty,
                                num.trees = 2000)
+      #mod <- regression_forest(X, train_data$pse_Y,
+      #                         #sample.fraction = 0.1,
+      #                         num.trees = 20000,
+      #                         tune.parameters = c("sample.fraction","mtry", "min.node.size", "honesty.fraction", "honesty.prune.leaves", "alpha", "imbalance.penalty"), #
+      #                         ci.group.size = 1)
     }
     else if (method == "Super learner"){
       #Could be added
@@ -344,9 +349,18 @@ nuis_mod <- function(model,
         analysis_data <- cbind(data,imp_pred = preds)
 
         #Imputing predictions for missing outcomes
-        for (i in 1:dim(analysis_data)[1]){
-          if (is.na(analysis_data$Y[i])==1){
-            analysis_data$Y[i] = analysis_data$imp_pred[i]
+        if (Y_cont == 1){
+          for (i in 1:dim(analysis_data)[1]){
+            if (is.na(analysis_data$Y[i])==1){
+              analysis_data$Y[i] = analysis_data$imp_pred[i]
+            }
+          }
+        }
+        if (Y_bin == 1){
+          for (i in 1:dim(analysis_data)[1]){
+            if (is.na(analysis_data$Y[i])==1){
+              analysis_data$Y[i] = rbinom(1, 1, analysis_data$imp_pred[i]) 
+            }
           }
         }
       },
@@ -404,18 +418,18 @@ nuis_mod <- function(model,
   }
   
   if (model == "Pseudo outcome" | model == "Pseudo outcome - CI"){
-    if (method == "Random forest"){
-      pred_data_matrix <- as.matrix(subset(pred_data, select = c(covariates)))
-      pred <- predict(mod, pred_data_matrix)
-    }
-    else if (method == "Parametric"){
-      pred_data <- subset(pred_data, select = c(covariates))
-      pred <- as.data.frame(predict(mod, pred_data, type = "response"))
-    }
-    else if (method == "Super learner"){
-      pred_data <- subset(pred_data, select = c(covariates))
-      pred <- predict(mod, pred_data)$pred
-    }
+   if (method == "Random forest"){
+     pred_data_matrix <- as.matrix(subset(pred_data, select = c(covariates)))
+     pred <- predict(mod, pred_data_matrix)
+   }
+   else if (method == "Parametric"){
+     pred_data <- subset(pred_data, select = c(covariates))
+     pred <- as.data.frame(predict(mod, pred_data, type = "response"))
+   }
+   else if (method == "Super learner"){
+     pred_data <- subset(pred_data, select = c(covariates))
+     pred <- predict(mod, pred_data)$pred
+   }
   }
 
 
@@ -443,7 +457,7 @@ nuis_mod <- function(model,
   }
   else if (model == "Pseudo outcome"){
     output <- list(po_pred = pred,
-                   po_mod = mod)
+                  po_mod = mod)
   }
   else if (model == "Pseudo outcome - CI"){
     output <- pred$predictions
