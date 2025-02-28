@@ -159,10 +159,10 @@ IPTW_IPCW_learner <- function(data,
           #Creating dataset for pseudo outcome model
           po_e_data <- subset(analysis_data, select = c(e_covariates,"s"))
           po_e_data <- subset(po_e_data, po_e_data$s == i)
-          po_e_data <- as.matrix(subset(po_e_data, select = -c(s)))
+          po_e_data <- subset(po_e_data, select = -c(s))
           po_g_data <- subset(analysis_data,select = c("A",g_covariates,"s"))
           po_g_data <- subset(po_g_data, po_g_data$s == i)
-          po_g_data <- as.matrix(subset(po_g_data, select = -c(s)))
+          po_g_data <- subset(po_g_data, select = -c(s))
           po_data <- subset(analysis_data,select = c("ID","Y","A","G",pse_covariates,"s"))
           po_data <- subset(po_data,po_data$s == i)
         },
