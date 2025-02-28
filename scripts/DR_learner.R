@@ -206,14 +206,14 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
           #Creating dataset for pseudo outcome model
           po_e_data <- subset(analysis_data, select = c(e_covariates,"s"))
           po_e_data <- subset(po_e_data, po_e_data$s == i)
-          po_e_data <- as.matrix(subset(po_e_data, select = -c(s)))
+          po_e_data <- subset(po_e_data, select = -c(s))
           po_o_data <- subset(analysis_data,select = c(out_covariates,"s"))
           po_o_data <- subset(po_o_data, po_o_data$s == i)
-          po_o_data <- as.matrix(subset(po_o_data, select = -c(s)))
+          po_o_data <- subset(po_o_data, select = -c(s))
           if (analysis == "mDR-learner"){
             po_g_data <- subset(analysis_data,select = c("A",g_covariates,"s"))
             po_g_data <- subset(po_g_data, po_g_data$s == i)
-            po_g_data <- as.matrix(subset(po_g_data, select = -c(s)))
+            po_g_data <- subset(po_g_data, select = -c(s))
           }
           po_data <- subset(analysis_data,select = c("ID","Y","A","G",pse_covariates,"s"))
           po_data <- subset(po_data,po_data$s == i)
@@ -400,7 +400,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
           },
           #if an error occurs, tell me the error
           error=function(e) {
-            stop(paste("An error occured when fitting the pseudo outcome model in split ",i,sep=""))
+            stop(paste("An error occured when fitting half sample pseudo outcome model in split ",i,sep=""))
             print(e)
           }
         )
@@ -424,7 +424,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
         temp <- unlist(R_data[i,])
         var <- var(temp)
         SE <- sqrt(var)
-        
+
         if (i == 1){
           var_list <- var
           SE_list <- SE
@@ -434,16 +434,16 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
           SE_list <- c(SE_list,SE)
         }
       }
-      
+
       #Creating normalised matrix
       normalized <- abs(R_data)/(sqrt(var_list))
 
       #Identifying column maxs
       CI_n_cols <- ncol(normalized)
       for (i in 1:CI_n_cols){
-        temp <- unlist(R_data[,i])
+        temp <- unlist(normalized[,i])
         colmax <- max(temp)
-        
+
         if (i == 1){
           colmax_list <- colmax
         }
@@ -451,7 +451,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
           colmax_list <- c(colmax_list,colmax)
         }
       }
-      
+
       #Creating S-star
       S_star <- quantile(colmax_list, 0.95)
 
@@ -475,18 +475,24 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       output <- list(CATE_est = pse_model$po_pred,
                      CATE_LCI = LCI,
                      CATE_UCI = UCI,
-                     data = po_data_all)
+                     data = po_data_all,
+                     R_data = R_data,
+                     SE_list = SE_list,
+                     var_list = var_list,
+                     S_star = S_star,
+                     normalized = normalized,
+                     colmax_list=colmax_list)
     }
   }
- 
+
   return(output)
 }
 
 
 
 ###############################################################
-# 
-# load("~/PhD/DR_Missing_Paper/Simulations/Results/Final_22_03_24/Scenario_1/Scenario_1_output1.RData")
+
+# load("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/Simulations/Results/Final_12_08_24/Model_results/Spec12/scenario_12_output1.RData")
 # check <- model_info_list$i$sim_data_train
 # check_test <- model_info_list$i$sim_data_test
 # 
@@ -519,7 +525,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
 #                                       "SL.lm"),
 #                        newdata = check_test,
 #                        rf_CI = TRUE,
-#                        num_boot = 2000)
+#                        num_boot = 100)
 
 # DR_check <- DR_learner(analysis = "Complete case",
 #                        data = check,
