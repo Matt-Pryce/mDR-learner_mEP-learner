@@ -116,10 +116,7 @@ source("nuisance_models.R")
 source("T_learner.R")
 source("DR_learner.R")
 source("EP_learner.R")
-
-
-# #--- Loading sieve basis list ---#
-# load(paste("Sieve_basis_list",setting,".RData",sep=""))    #Can be used if Sieve package unavaiable on HPC 
+source("IPTW_IPCW_learner.R")
 
 
 #--- Running loop ---#
@@ -188,7 +185,7 @@ for (i in 1:sims){
                    "SL.svm_1",
                    "SL.kernelKnn_4","SL.kernelKnn_5","SL.kernelKnn_6",
                    "SL.kernelKnn_10","SL.kernelKnn_11","SL.kernelKnn_12")
-
+      
       T_learner_CC <- T_learner(analysis = "Complete case",
                                 data = sim_data_train,
                                 id = "ID",
@@ -199,7 +196,7 @@ for (i in 1:sims){
                                 out_covariates = cov_list,
                                 out_SL_lib = out_lib,
                                 newdata = sim_data_test)
-
+      
       model_info_sim_list <- append(model_info_sim_list,list(T_CC = T_learner_CC))
     },
     error=function(e) {
@@ -207,8 +204,8 @@ for (i in 1:sims){
       print(e)
     }
   )
-
-
+  
+  
   #-----------------------------------------#
   #--- Running T learner (SL imputation) ---#
   #-----------------------------------------#
@@ -224,7 +221,7 @@ for (i in 1:sims){
                    "SL.svm_1",
                    "SL.kernelKnn_4","SL.kernelKnn_5","SL.kernelKnn_6",
                    "SL.kernelKnn_10","SL.kernelKnn_11","SL.kernelKnn_12")
-
+      
       imp_lib <- c("SL.mean",
                    "SL.glm",
                    "SL.glmnet_8", "SL.glmnet_9",
@@ -235,7 +232,7 @@ for (i in 1:sims){
                    "SL.svm_1",
                    "SL.kernelKnn_4","SL.kernelKnn_5","SL.kernelKnn_6",
                    "SL.kernelKnn_10","SL.kernelKnn_11","SL.kernelKnn_12")
-
+      
       T_learner_imp <- T_learner(analysis = "SL imputation",
                                  data = sim_data_train,
                                  id = "ID",
@@ -248,7 +245,7 @@ for (i in 1:sims){
                                  imp_covariates = cov_list,
                                  imp_SL_lib = imp_lib,
                                  newdata = sim_data_test)
-
+      
       model_info_sim_list <- append(model_info_sim_list,list(T_imp = T_learner_imp))
     },
     error=function(e) {
@@ -256,11 +253,72 @@ for (i in 1:sims){
       print(e)
     }
   )
-
-
-
+  
+  
+  #-----------------------------------------------#
+  #--- Running IPTW-IPCW learner (10 CV folds) ---#
+  #-----------------------------------------------#
+  tryCatch(
+    {
+      pse_lib <- c("SL.mean",
+                   "SL.lm",
+                   "SL.glmnet_8", "SL.glmnet_9",
+                   "SL.glmnet_11", "SL.glmnet_12",
+                   "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                   "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                   "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                   "SL.svm_1",
+                   "SL.kernelKnn_4","SL.kernelKnn_10")
+      e_lib <- c("SL.mean",
+                 "SL.glm",
+                 "SL.glmnet_8", "SL.glmnet_9",
+                 "SL.glmnet_11", "SL.glmnet_12",
+                 "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                 "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                 "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                 "SL.svm_1",
+                 "SL.kernelKnn_4","SL.kernelKnn_10")
+      
+      g_lib <- c("SL.mean",
+                 "SL.glm",
+                 "SL.glmnet_8", "SL.glmnet_9",
+                 "SL.glmnet_11", "SL.glmnet_12",
+                 "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                 "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                 "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                 "SL.svm_1",
+                 "SL.kernelKnn_4","SL.kernelKnn_5","SL.kernelKnn_6",
+                 "SL.kernelKnn_10","SL.kernelKnn_11","SL.kernelKnn_12")
+      
+      IPTW_IPCW_learner_10 <- IPTW_IPCW_learner(data = sim_data_train,
+                                                id = "ID",
+                                                outcome = "Y",
+                                                exposure = "A",
+                                                outcome_observed_indicator = "G_obs",
+                                                splits = 10,
+                                                e_method = "Super learner",
+                                                e_covariates = cov_list,
+                                                e_SL_lib = e_lib,
+                                                g_method = "Super learner",
+                                                g_covariates = cov_list,
+                                                g_SL_lib = g_lib,
+                                                pse_method = "Random forest",
+                                                pse_covariates = cov_list,
+                                                pse_SL_lib = pse_lib,
+                                                newdata = sim_data_test)
+      
+      model_info_sim_list <- append(model_info_sim_list,list(IPTW_IPCW_10 = IPTW_IPCW_learner_10))
+    },
+    #if an error occurs, tell me the error
+    error=function(e) {
+      message(paste("An error occured when fitting the IPTW_IPCW-learner (10 CV folds) for scenario ",scen," with sample size ",n," in simulation ",seed,sep=""))
+      print(e)
+    }
+  )
+  
+  
   #---------------------------------------------------------#
-  #--- Running DR learner - 10 CV folds (Available case) ---#
+  #--- Running DR learner - 10 CV folds (Available case) ---#   
   #---------------------------------------------------------#
   tryCatch(
     {
@@ -283,7 +341,7 @@ for (i in 1:sims){
                  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
                  "SL.svm_1",
                  "SL.kernelKnn_4","SL.kernelKnn_10")
-
+      
       DR_learner_10_AC <- DR_learner(analysis = "Available case",
                                      data = sim_data_train,
                                      id = "ID",
@@ -297,11 +355,13 @@ for (i in 1:sims){
                                      out_method = "Super learner",
                                      out_covariates = cov_list,
                                      out_SL_lib = out_lib,
-                                     pse_method = "Super learner",
+                                     pse_method = "Random forest",
                                      pse_covariates = cov_list,
                                      pse_SL_lib = pse_lib,
-                                     newdata = sim_data_test)
-
+                                     newdata = sim_data_test,
+                                     rf_CI = TRUE,
+                                     num_boot = 500)
+      
       model_info_sim_list <- append(model_info_sim_list,list(DR10_AC = DR_learner_10_AC))
     },
     #if an error occurs, tell me the error
@@ -310,9 +370,9 @@ for (i in 1:sims){
       print(e)
     }
   )
-
-
-
+  
+  
+  
   #--------------------------------------------------------#
   #--- Running DR learner - 10 CV folds (SL imputation) ---#
   #--------------------------------------------------------#
@@ -347,7 +407,7 @@ for (i in 1:sims){
                    "SL.svm_1",
                    "SL.kernelKnn_4","SL.kernelKnn_5","SL.kernelKnn_6",
                    "SL.kernelKnn_10","SL.kernelKnn_11","SL.kernelKnn_12")
-
+      
       DR_learner_10_imp <- DR_learner(analysis = "SL imputation",
                                       data = sim_data_train,
                                       id = "ID",
@@ -366,11 +426,13 @@ for (i in 1:sims){
                                       g_SL_lib = g_lib,
                                       imp_covariates = cov_list,
                                       imp_SL_lib = imp_lib,
-                                      pse_method = "Super learner",
+                                      pse_method = "Random forest",
                                       pse_covariates = cov_list,
                                       pse_SL_lib = pse_lib,
-                                      newdata = sim_data_test)
-
+                                      newdata = sim_data_test,
+                                      rf_CI = TRUE,
+                                      num_boot = 500)
+      
       model_info_sim_list <- append(model_info_sim_list,list(DR10_imp = DR_learner_10_imp))
     },
     #if an error occurs, tell me the error
@@ -379,11 +441,12 @@ for (i in 1:sims){
       print(e)
     }
   )
+  
 
-
-
+  
+  
   #---------------------------------------------------------#
-  #--- Running EP learner - 10 CV folds (Available case) ---#
+  #--- Running EP learner - 10 CV folds (Available case) ---#   
   #---------------------------------------------------------#
   tryCatch(
     {
@@ -406,7 +469,7 @@ for (i in 1:sims){
                  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
                  "SL.svm_1",
                  "SL.kernelKnn_4","SL.kernelKnn_10")
-
+      
       EP_learner_10_AC <- EP_learner(analysis = "Available case",
                                      data = sim_data_train,
                                      id = "ID",
@@ -420,11 +483,13 @@ for (i in 1:sims){
                                      out_method = "Super learner",
                                      out_covariates = cov_list,
                                      out_SL_lib = out_lib,
-                                     pse_method = "Super learner",
+                                     pse_method = "Random forest",
                                      pse_covariates = cov_list,
                                      pse_SL_lib = pse_lib,
-                                     newdata = sim_data_test)
-
+                                     newdata = sim_data_test,
+                                     rf_CI = TRUE,
+                                     num_boot = 500)
+      
       model_info_sim_list <- append(model_info_sim_list,list(EP10_AC = EP_learner_10_AC))
     },
     #if an error occurs, tell me the error
@@ -433,9 +498,9 @@ for (i in 1:sims){
       print(e)
     }
   )
-
-
-
+  
+  
+  
   #--------------------------------------------------------#
   #--- Running EP learner - 10 CV folds (SL imputation) ---#
   #--------------------------------------------------------#
@@ -470,7 +535,7 @@ for (i in 1:sims){
                    "SL.svm_1",
                    "SL.kernelKnn_4","SL.kernelKnn_5","SL.kernelKnn_6",
                    "SL.kernelKnn_10","SL.kernelKnn_11","SL.kernelKnn_12")
-
+      
       EP_learner_10_imp <- EP_learner(analysis = "SL imputation",
                                       data = sim_data_train,
                                       id = "ID",
@@ -489,11 +554,13 @@ for (i in 1:sims){
                                       g_SL_lib = g_lib,
                                       imp_covariates = cov_list,
                                       imp_SL_lib = imp_lib,
-                                      pse_method = "Super learner",
+                                      pse_method = "Random forest",
                                       pse_covariates = cov_list,
                                       pse_SL_lib = pse_lib,
-                                      newdata = sim_data_test)
-
+                                      newdata = sim_data_test,
+                                      rf_CI = TRUE,
+                                      num_boot = 500)
+      
       model_info_sim_list <- append(model_info_sim_list,list(EP10_imp = EP_learner_10_imp))
     },
     #if an error occurs, tell me the error
@@ -502,8 +569,9 @@ for (i in 1:sims){
       print(e)
     }
   )
-
-
+  
+  
+  
   #-----------------------------------------#
   #--- Running mDR learner (10 CV folds) ---#
   #-----------------------------------------#
@@ -528,7 +596,7 @@ for (i in 1:sims){
                  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
                  "SL.svm_1",
                  "SL.kernelKnn_4","SL.kernelKnn_10")
-
+      
       g_lib <- c("SL.mean",
                  "SL.glm",
                  "SL.glmnet_8", "SL.glmnet_9",
@@ -539,7 +607,7 @@ for (i in 1:sims){
                  "SL.svm_1",
                  "SL.kernelKnn_4","SL.kernelKnn_5","SL.kernelKnn_6",
                  "SL.kernelKnn_10","SL.kernelKnn_11","SL.kernelKnn_12")
-
+      
       mDR_learner_10 <- DR_learner(analysis = "mDR-learner",
                                    data = sim_data_train,
                                    id = "ID",
@@ -556,11 +624,13 @@ for (i in 1:sims){
                                    g_method = "Super learner",
                                    g_covariates = cov_list,
                                    g_SL_lib = g_lib,
-                                   pse_method = "Super learner",
+                                   pse_method = "Random forest",
                                    pse_covariates = cov_list,
                                    pse_SL_lib = pse_lib,
-                                   newdata = sim_data_test)
-
+                                   newdata = sim_data_test,
+                                   rf_CI = TRUE,
+                                   num_boot = 500)
+      
       model_info_sim_list <- append(model_info_sim_list,list(mDR_10 = mDR_learner_10))
     },
     #if an error occurs, tell me the error
@@ -569,9 +639,9 @@ for (i in 1:sims){
       print(e)
     }
   )
-
-
-
+  
+  
+  
   #-----------------------------------------#
   #--- Running mEP learner (10 CV folds) ---#
   #-----------------------------------------#
@@ -596,7 +666,7 @@ for (i in 1:sims){
                  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
                  "SL.svm_1",
                  "SL.kernelKnn_4","SL.kernelKnn_10")
-
+      
       g_lib <- c("SL.mean",
                  "SL.glm",
                  "SL.glmnet_8", "SL.glmnet_9",
@@ -607,28 +677,30 @@ for (i in 1:sims){
                  "SL.svm_1",
                  "SL.kernelKnn_4","SL.kernelKnn_5","SL.kernelKnn_6",
                  "SL.kernelKnn_10","SL.kernelKnn_11","SL.kernelKnn_12")
-
+      
       mEP_learner_10 <- EP_learner(analysis = "mEP-learner",
                                    data = sim_data_train,
-                                          id = "ID",
-                                          outcome = "Y",
-                                          exposure = "A",
-                                          outcome_observed_indicator = "G_obs",
-                                          splits = 10,
-                                          e_method = "Super learner",
-                                          e_covariates = cov_list,
-                                          e_SL_lib = e_lib,
-                                          out_method = "Super learner",
-                                          out_covariates = cov_list,
-                                          out_SL_lib = out_lib,
-                                          g_method = "Super learner",
-                                          g_covariates = cov_list,
-                                          g_SL_lib = g_lib,
-                                          pse_method = "Super learner",
-                                          pse_covariates = cov_list,
-                                          pse_SL_lib = pse_lib,
-                                          newdata = sim_data_test)
-
+                                   id = "ID",
+                                   outcome = "Y",
+                                   exposure = "A",
+                                   outcome_observed_indicator = "G_obs",
+                                   splits = 10,
+                                   e_method = "Super learner",
+                                   e_covariates = cov_list,
+                                   e_SL_lib = e_lib,
+                                   out_method = "Super learner",
+                                   out_covariates = cov_list,
+                                   out_SL_lib = out_lib,
+                                   g_method = "Super learner",
+                                   g_covariates = cov_list,
+                                   g_SL_lib = g_lib,
+                                   pse_method = "Random forest",
+                                   pse_covariates = cov_list,
+                                   pse_SL_lib = pse_lib,
+                                   newdata = sim_data_test,
+                                   rf_CI = TRUE,
+                                   num_boot = 500)
+      
       model_info_sim_list <- append(model_info_sim_list,list(mEP_10 = mEP_learner_10))
     },
     #if an error occurs, tell me the error
@@ -637,6 +709,7 @@ for (i in 1:sims){
       print(e)
     }
   )
+
 
   model_info_list <- append(model_info_list,list(i = model_info_sim_list))
 }
