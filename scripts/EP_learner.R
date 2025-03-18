@@ -343,6 +343,9 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
     }
   }
 
+  #Defining po_data_all for reference by half sample bootstrap 
+  po_data_all_CI <- po_data_all
+  
   #--------------------------#
   #--- Establishing Sieve ---#
   #--------------------------#
@@ -454,10 +457,82 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
       # Randomly sample half the rows
       set.seed(596967 + i)  # Set seed for reproducibility
       random_indices <- sample(1:pse_n_rows, size = ceiling(pse_n_rows/2), replace = FALSE)
-      half_sample <- po_data_all[random_indices, ]
+      half_sample <- po_data_all_CI[random_indices, ]
       half_sample <- half_sample[order(half_sample$ID), ]
       
-      #Running final stage model
+      #--- Establishing sieve ---#
+      if (analysis == "Available case" |analysis == "mEP-learner"){
+        sieve_data_h <- subset(half_sample,is.na(half_sample$Y)==0)   #Only update observed individuals
+      }
+      else if (analysis == "Complete case" | analysis == "SL imputation"){  
+        sieve_data_h <- half_sample
+      }
+      
+      X_h <- as.matrix(subset(sieve_data_h, select=pse_covariates))
+      basisN <- sieve_num_basis
+      if(is.na(basisN)) {
+        basisN <- ceiling((nrow(X_h))^(1/3)*ncol(X_h))
+      }
+      basisN <- basisN + 1
+      interaction_order <- sieve_interaction_order
+      
+      sieve_basis_h <- Sieve::sieve_preprocess(as.matrix(X_h),
+                                               basisN = basisN,
+                                               interaction_order = interaction_order,
+                                               type = "cosine")$Phi
+      
+      #--- Targetng step ---#
+      sieve_basis_h_train <- sieve_basis_h * ((sieve_data_h$A==1) - (sieve_data_h$A == 0))
+      o_A_pred_h <- (sieve_data_h$A == 1) * (sieve_data_h$o_1_pred) + (sieve_data_h$A == 0) * (sieve_data_h$o_0_pred)
+      
+      if (analysis == "Complete case" | analysis == "Available case" | analysis == "SL imputation"){
+        glmnet_fit_h <- glmnet::glmnet(x=sieve_basis_h_train, y=sieve_data_h$Y,
+                                       offset = o_A_pred_h,
+                                       weights = (sieve_data_h$A == 1)/sieve_data_h$e_pred + (sieve_data_h$A == 0)/(1-sieve_data_h$e_pred),
+                                       family = "gaussian",
+                                       standardize = FALSE,
+                                       lambda = 1e-8,
+                                       intercept = FALSE,
+                                       alpha = 0)
+      }
+      else if (analysis == "mEP-learner"){
+        glmnet_fit_h <- glmnet::glmnet(x=sieve_basis_h_train, y=sieve_data_h$Y,
+                                       offset = o_A_pred_h,
+                                       weights = ((sieve_data_h$A == 1)*(sieve_data_h$G == 1))/(sieve_data_h$e_pred*sieve_data_h$g_pred) + ((sieve_data_h$A == 0)*(sieve_data_h$G == 1))/((1-sieve_data_h$e_pred)*sieve_data_h$g_pred),
+                                       family = "gaussian",
+                                       standardize = FALSE,
+                                       lambda = 1e-8,
+                                       intercept = FALSE,
+                                       alpha = 0)
+      }
+      beta_h <- as.matrix(glmnet_fit_h$beta)
+      
+      
+      #--- Updating outcome preds ---#
+      sieve_data_h$correction <- as.vector(sieve_basis_h %*% beta_h)
+      sieve_data_h$o_1_pred_star <- sieve_data_h$o_1_pred + sieve_data_h$correction
+      sieve_data_h$o_0_pred_star <- sieve_data_h$o_0_pred - sieve_data_h$correction
+      
+      if (analysis == "Available case" |analysis == "mEP-learner"){
+        #Merging updated outcome preds with full dataset
+        sieve_data_sub_h <- subset(sieve_data_h,select = c(ID,o_1_pred_star,o_0_pred_star))
+        half_sample <- merge(half_sample,sieve_data_sub_h,by="ID",all.x = T)
+        for (i2 in 1:length(half_sample$Y)){
+          if (is.na(half_sample$o_1_pred_star[i2])==1){
+            half_sample$o_1_pred_star[i2] <- half_sample$o_1_pred[i2]
+            half_sample$o_0_pred_star[i2] <- half_sample$o_0_pred[i2]
+          }
+        }
+      }
+      else {
+        half_sample <- sieve_data_h
+      }
+      
+      #Construct EP-learner CATE estimate
+      half_sample$pse_Y <- half_sample$o_1_pred_star  - half_sample$o_0_pred_star
+      
+      
+      #--- Running final stage model ---#
       tuned_parameters <- pse_model$po_mod$tunable.params
       tryCatch(
         {
@@ -480,9 +555,9 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
       
       #Creating R and storing
       full_sample_est <- pse_model$po_pred
-      
+
       R <- as.numeric(full_sample_est$predictions - half_sample_est)
-      
+
       if (i == 1){
         R_data <- as.data.frame(R)
       }
@@ -497,7 +572,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
       temp <- unlist(R_data[i,])
       var <- var(temp)
       SE <- sqrt(var)
-      
+
       if (i == 1){
         var_list <- var
         SE_list <- SE
@@ -507,16 +582,16 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
         SE_list <- c(SE_list,SE)
       }
     }
-    
+
     #Creating normalised matrix
     normalized <- abs(R_data)/(sqrt(var_list))
-    
+
     #Identifying column maxs
     CI_n_cols <- ncol(normalized)
     for (i in 1:CI_n_cols){
       temp <- unlist(normalized[,i])
       colmax <- max(temp)
-      
+
       if (i == 1){
         colmax_list <- colmax
       }
@@ -524,10 +599,10 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
         colmax_list <- c(colmax_list,colmax)
       }
     }
-    
+
     #Creating S-star
     S_star <- quantile(colmax_list, 0.95)
-    
+
     LCI <-  pse_model$po_pred$predictions - sqrt(var_list)*S_star
     UCI <-  pse_model$po_pred$predictions + sqrt(var_list)*S_star
   }
@@ -566,70 +641,70 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
 ##############################################################
 
 
-# load("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/Simulations/Results/Final_12_08_24/Model_results/Spec8/scenario_8_output1.RData")
-# check <- model_info_list$i$sim_data_train
-# check_test <- model_info_list$i$sim_data_test
-# 
-# #Example
-# EP_check <- EP_learner(analysis = "mEP-learner",
-#                        data = check,
-#                        id = "ID",
-#                        outcome = "Y",
-#                        exposure = "A",
-#                        outcome_observed_indicator = "G_obs",
-#                        splits = 10,
-#                        e_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        e_method = "Super learner",
-#                        e_SL_lib = c("SL.mean",
-#                                     "SL.lm"),
-#                                     # "SL.glmnet_8", "SL.glmnet_9",
-#                                     # "SL.glmnet_11"),
-#                        out_method = "Super learner",
-#                        out_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        out_SL_lib = c("SL.mean",
-#                                       "SL.lm"),
-#                                       # "SL.glmnet_8", "SL.glmnet_9",
-#                                       # "SL.glmnet_11", "SL.glmnet_12",
-#                                       # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                                       # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                                       # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                                       # "SL.svm_1",
-#                                       # "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        g_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        g_method = "Super learner",
-#                        g_SL_lib = c("SL.mean",
-#                                     "SL.lm"),#,
-#                                     # "SL.glmnet_8", "SL.glmnet_9",
-#                                     # "SL.glmnet_11", "SL.glmnet_12",
-#                                     # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                                     # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                                     # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                                     # "SL.svm_1",
-#                                     # "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        sieve_interaction_order=3,
-#                        imp_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        imp_SL_lib = c("SL.mean",
-#                                       "SL.lm"),#,
-#                                       # "SL.glmnet_8", "SL.glmnet_9",
-#                                       # "SL.glmnet_11", "SL.glmnet_12",
-#                                       # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                                       # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                                       # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                                       # "SL.svm_1",
-#                                       # "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        pse_method = "Random forest",
-#                        pse_covariates = c("X1"),#,"X2","X3","X4","X5","X6"),
-#                        pse_SL_lib = c("SL.mean",
-#                                       "SL.lm"),
-#                                       # "SL.glmnet_8", "SL.glmnet_9",
-#                                       # "SL.glmnet_11", "SL.glmnet_12",
-#                                       # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
-#                                       # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
-#                                       # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
-#                                       # "SL.svm_1",
-#                                       # "SL.kernelKnn_4","SL.kernelKnn_10"),
-#                        newdata = check_test,
-#                        rf_CI = TRUE,
-#                        num_boot = 100)
+load("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/Simulations/Results/First_submission/Model_results/Spec8/scenario_8_output1.RData")
+check <- model_info_list$i$sim_data_train
+check_test <- model_info_list$i$sim_data_test
+
+#Example
+EP_check <- EP_learner(analysis = "mEP-learner",
+                       data = check,
+                       id = "ID",
+                       outcome = "Y",
+                       exposure = "A",
+                       outcome_observed_indicator = "G_obs",
+                       splits = 10,
+                       e_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       e_method = "Super learner",
+                       e_SL_lib = c("SL.mean",
+                                    "SL.lm"),
+                                    # "SL.glmnet_8", "SL.glmnet_9",
+                                    # "SL.glmnet_11"),
+                       out_method = "Super learner",
+                       out_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       out_SL_lib = c("SL.mean",
+                                      "SL.lm"),
+                                      # "SL.glmnet_8", "SL.glmnet_9",
+                                      # "SL.glmnet_11", "SL.glmnet_12",
+                                      # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                                      # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                                      # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                                      # "SL.svm_1",
+                                      # "SL.kernelKnn_4","SL.kernelKnn_10"),
+                       g_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       g_method = "Super learner",
+                       g_SL_lib = c("SL.mean",
+                                    "SL.lm"),#,
+                                    # "SL.glmnet_8", "SL.glmnet_9",
+                                    # "SL.glmnet_11", "SL.glmnet_12",
+                                    # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                                    # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                                    # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                                    # "SL.svm_1",
+                                    # "SL.kernelKnn_4","SL.kernelKnn_10"),
+                       sieve_interaction_order=3,
+                       imp_covariates = c("X1","X2","X3","X4","X5","X6"),
+                       imp_SL_lib = c("SL.mean",
+                                      "SL.lm"),#,
+                                      # "SL.glmnet_8", "SL.glmnet_9",
+                                      # "SL.glmnet_11", "SL.glmnet_12",
+                                      # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                                      # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                                      # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                                      # "SL.svm_1",
+                                      # "SL.kernelKnn_4","SL.kernelKnn_10"),
+                       pse_method = "Random forest",
+                       pse_covariates = c("X1"),#,"X2","X3","X4","X5","X6"),
+                       pse_SL_lib = c("SL.mean",
+                                      "SL.lm"),
+                                      # "SL.glmnet_8", "SL.glmnet_9",
+                                      # "SL.glmnet_11", "SL.glmnet_12",
+                                      # "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+                                      # "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+                                      # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+                                      # "SL.svm_1",
+                                      # "SL.kernelKnn_4","SL.kernelKnn_10"),
+                       newdata = check_test,
+                       rf_CI = TRUE,
+                       num_boot = 10)
 
 
