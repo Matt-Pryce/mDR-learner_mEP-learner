@@ -29,9 +29,6 @@ T-learner
   - If nuisance functions input, T-learner can only make predictions of input data 
 
 
-****
-
-
 
 **Supplementary materials**
 
