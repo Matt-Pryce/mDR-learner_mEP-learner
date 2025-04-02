@@ -19,10 +19,19 @@ DR-learner/EP-learner
     complete case analysis 
   - Half sample bootstrap CIs can be estimated for these learners using the same guidance as above. 
     
+
+mDR-learner longitudinal extension
+  - Code for this extension follows the same notation as for the mDR-learner
+  - This can be found in script/mDRL_learner.
+
 T-learner
   - Same notes as DR-learner/EP-learner
   - If nuisance functions input, T-learner can only make predictions of input data 
-  
+
+
+****
+
+
 
 **Supplementary materials**
 
