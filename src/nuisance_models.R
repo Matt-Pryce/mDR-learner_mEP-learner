@@ -299,6 +299,24 @@ nuis_mod <- function(model,
                             SL.library = SL_lib)
       }
     }
+    else if (method == "Super learner - Discrete"){
+      if (model == "Pseudo outcome"){
+        cv.mod <- CV.SuperLearner(Y = train_data$pse_Y, X = data.frame(subset(train_data, select = covariates)),
+                            method = "method.NNLS",
+                            family = gaussian(),
+                            cvControl = list(V = 10, stratifyCV=FALSE),
+                            SL.library = SL_lib)
+        best_learner <- names(sort(table(unlist(cv.mod$whichDiscreteSL)), decreasing = TRUE))[1]
+        best_learner <- sub("_.*$", "", best_learner)
+        mod <- SuperLearner(
+          Y = train_data$pse_Y,
+          X = data.frame(subset(train_data, select = covariates)),
+          SL.library = best_learner,
+          method = "method.NNLS",
+          family = gaussian()
+        )
+      }
+    }
   }
 
   
@@ -426,7 +444,7 @@ nuis_mod <- function(model,
      pred_data <- subset(pred_data, select = c(covariates))
      pred <- as.data.frame(predict(mod, pred_data, type = "response"))
    }
-   else if (method == "Super learner"){
+   else if (method == "Super learner" | method == "Super learner - Discrete"){
      pred_data <- subset(pred_data, select = c(covariates))
      pred <- predict(mod, pred_data)$pred
    }
@@ -457,7 +475,7 @@ nuis_mod <- function(model,
   }
   else if (model == "Pseudo outcome"){
     output <- list(po_pred = pred,
-                  po_mod = mod)
+                   po_mod = mod)
   }
   else if (model == "Pseudo outcome - CI"){
     output <- pred$predictions
