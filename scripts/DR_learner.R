@@ -18,7 +18,6 @@ library(reshape2)
 library(data.table)
 library(SuperLearner)  
 
-#check
 
 #######################################
 #--- For single time point setting ---#
