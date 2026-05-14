@@ -1,9 +1,9 @@
-#######################################################################################
+# =====================================================================
 # Script: DR-Learner function
-# Date: 20/03/24
-# Author: Matt Pryce 
+# Date: 20/03/24 # nolint
+# Author: Matt Pryce
 # Notes: DR-learner function for single time point setting
-#######################################################################################
+# =====================================================================
 
 library(caTools)
 library(tidyverse)
@@ -16,74 +16,78 @@ library(grf)
 library(xgboost)
 library(reshape2)
 library(data.table)
-library(SuperLearner)  
+library(SuperLearner)
 
 
 #######################################
 #--- For single time point setting ---#
 #######################################
 
-#' @param analysis Type of analysis to be run (Complete case or outcome imputation) 
+#' @param analysis Type of analysis (Complete case or outcome imputation)
 #' @param data The data frame containing all required information
 #' @param id Identification for individuals
 #' @param outcome The name of the outcome of interest
 #' @param exposure The name of the exposure of interest
-#' @param outcome_observed_indicator Indicator identifying when the outcome variable is observed (1=observed, 0=missing)
-#' @param splits Number of splitsu for cross-fitting (Variations allowed: 1, 3, 10)
+#' @param outcome_observed_indicator Indicator identifying when the outcome variable is observed (1=observed, 0=missing) # nolint
+#' @param splits Number of splitsu for cross-fitting (Variations allowed: 1, 3, 10) # nolint
 #' @param out_method Statistical technique used to run the outcome models
-#' @param out_covariates  List containing the names of the variables to be input into each outcome model
+#' @param out_covariates  List containing the names of the variables to be input into each outcome model # nolint
 #' @param out_SL_lib Library to be used in super learner if selected
 #' @param e_method Statistical technique used to run the propensity score model
-#' @param e_covariates  List containing the names of the variables to be input into the propensity score model
+#' @param e_covariates  List containing the names of the variables to be input into the propensity score model # nolint
 #' @param e_SL_lib Library to be used in super learner if selected
-#' @param nuisance_estimates_input Indicator for whether nuisance estimates provided
+#' @param nuisance_estimates_input Indicator for whether nuisance estimates provided # nolint
 #' @param o_0_pred Variable name for unexposed outcome predictions (if provided)
 #' @param o_1_pred Variable name for exposed outcome predictions (if provided)
 #' @param e_pred Variable name for propensity score predictions (if provided)
 #' @param g_pred Variable name for censoring predictions (if provided)
 #' @param g_method Statistical technique used to run the missingness model
-#' @param g_covariates List containing the names of the variables to be input into the missingness model, excluding exposure
-#' @param g_SL_lib Library to be used in super learner if selected for missingness model
+#' @param g_covariates List containing the names of the variables to be input into the missingness model, excluding exposure # nolint
+#' @param g_SL_lib Library to be used in super learner if selected for missingness model # nolint
 #' @param pse_method Statistical technique used to run the pseudo outcome model
-#' @param pse_covariates List containing the names of the variables to be input into the pseudo outcome model
-#' @param pse_SL_lib Library to be used in super learner if selected for pseudo outcome model
-#' @param imp_covariates Covariates to be used in SL imputation model if SL imputation used
+#' @param pse_covariates List containing the names of the variables to be input into the pseudo outcome model # nolint
+#' @param pse_SL_lib Library to be used in super learner if selected for pseudo outcome model # nolint
+#' @param imp_covariates Covariates to be used in SL imputation model if SL imputation used # nolint
 #' @param imp_SL_lib SL libaray for imputation model if SL imputation used
 #' @param newdata New data to create predictions for
 
-#' @return A list containing: CATE estimates, a dataset used to train the learner, dataset containing all 
-#'         pseudo-outcome predictions (if splits 3) 
+#' @return A list containing: CATE estimates, a dataset used to train the learner, dataset containing all  # nolint
+#'         pseudo-outcome predictions (if splits 3)
 
 
-DR_learner <- function(analysis = c("Complete case","Available case","SL imputation","mDR-learner"),
-                       data,
-                       id,
-                       outcome,
-                       exposure,
-                       outcome_observed_indicator = "None",
-                       splits = c(1,3,10),
-                       e_method = c("Parametric","Random forest","Super Learner"),
-                       e_covariates,
-                       e_SL_lib,
-                       out_method = c("Parametric","Random forest","Super Learner"),
-                       out_covariates,
-                       out_SL_lib,
-                       g_method = c("Parametric","Random forest","Super Learner"),
-                       g_covariates = c(),
-                       g_SL_lib,
-                       nuisance_estimates_input = 0,
-                       e_pred = NA,
-                       o_0_pred = NA,
-                       o_1_pred = NA,
-                       g_pred = NA,
-                       pse_method = c("Parametric","Random forest","Super Learner"),
-                       pse_covariates,
-                       pse_SL_lib,
-                       imp_covariates = c(),
-                       imp_SL_lib,
-                       rf_CI = FALSE,
-                       num_boot = 200,
-                       newdata
+DR_learner <- function(
+  analysis = c("Complete case",
+               "Available case",
+               "SL imputation",
+               "mDR-learner"),
+  data,
+  id,
+  outcome,
+  exposure,
+  outcome_observed_indicator = "None",
+  splits = c(1,3,10),
+  e_method = c("Parametric","Random forest","Super Learner"),
+  e_covariates,
+  e_SL_lib,
+  out_method = c("Parametric","Random forest","Super Learner"),
+  out_covariates,
+  out_SL_lib,
+  g_method = c("Parametric","Random forest","Super Learner"),
+  g_covariates = c(),
+  g_SL_lib,
+  nuisance_estimates_input = 0,
+  e_pred = NA,
+  o_0_pred = NA,
+  o_1_pred = NA,
+  g_pred = NA,
+  pse_method = c("Parametric","Random forest","Super Learner"),
+  pse_covariates,
+  pse_SL_lib,
+  imp_covariates = c(),
+  imp_SL_lib,
+  CI = FALSE,
+  num_boot = 200,
+  newdata
 ){
   if (analysis == "mDR-learner"){
     learner <- "mDR-learner"  
@@ -356,7 +360,7 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
   }
   
   if (splits == 1 | splits == 10){
-    #Gaining estimates from all data estimates
+    #--- Gaining estimates from all data estimates ---#
     tryCatch(
       {
         pse_model <- nuis_mod(model = "Pseudo outcome",
@@ -375,7 +379,8 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
 
 
     #--- Gaining CI's ---#
-    if (rf_CI == TRUE & pse_method == "Random forest"){
+    # Option 1 - Half sample bootstrapping (If using RF in final stage)
+    if (CI == TRUE & pse_method == "Random forest"){
       pse_n_rows <- nrow(po_data_all)
       for (i in 1:num_boot){
         # Randomly sample half the rows
@@ -458,8 +463,30 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
       LCI <-  pse_model$po_pred$predictions - sqrt(var_list)*S_star
       UCI <-  pse_model$po_pred$predictions + sqrt(var_list)*S_star
     }
-    else if (rf_CI == TRUE & pse_method != "Random forest"){
-      return("Inappropriate pseudo-outcome regression method for obtaining CI's")
+    else if (CI == TRUE & pse_method == "Parametric"){
+      # Extract design matrix from pseudo outcome data
+      X <- as.matrix(cbind(1, po_data_all[, pse_covariates]))
+      y <- po_data_all$pse_Y
+      
+      # Calculate Huber-White sandwich estimator covariance matrix
+      hw_cov_mat <- sandwich_est(X = X, y = y, model = pse_model$po_mod)
+      
+      # Create design matrix for new data predictions
+      newdata_X <- as.matrix(cbind(1, newdata[, pse_covariates]))
+      
+      # Calculate standard errors for predictions
+      SE_list <- get_se(hw_est = hw_cov_mat, pred.grid = newdata_X)
+      
+      # Calculate 95% confidence intervals (1.96 * SE for 95% CI)
+      LCI <- pse_model$po_pred[,1] - 1.96 * SE_list
+      UCI <- pse_model$po_pred[,1] + 1.96 * SE_list
+    }
+    else if (CI == TRUE & pse_method == "HAL"){
+      #...
+    }
+    else if (CI == TRUE & (pse_method != "Random forest" | pse_method != "Parametric" | pse_method != "HAL")){ # nolint # nolint # nolint # nolint
+      return("Inappropriate pseudo-outcome regression 
+              method for obtaining CI's")
     }
   }
 
@@ -467,11 +494,11 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
   #--- Returning information ---#
   #-----------------------------#
   if (splits == 1 | splits == 10){
-    if (rf_CI != TRUE){
+    if (CI != TRUE){
       output <- list(CATE_est = pse_model$po_pred,
                      data = po_data_all)
     }
-    else if (rf_CI == TRUE){
+    else if (CI == TRUE & pse_method == "Random forest"){
       output <- list(CATE_est = pse_model$po_pred,
                      CATE_LCI = LCI,
                      CATE_UCI = UCI,
@@ -483,49 +510,153 @@ DR_learner <- function(analysis = c("Complete case","Available case","SL imputat
                      normalized = normalized,
                      colmax_list=colmax_list)
     }
+    else if (CI == TRUE & pse_method == "Parametric"){
+      output <- list(CATE_est = pse_model$po_pred,
+                     CATE_LCI = LCI,
+                     CATE_UCI = UCI,
+                     data = po_data_all,
+                     SE_list = SE_list,
+                     hw_cov_mat = hw_cov_mat)
+    }
   }
 
   return(output)
 }
 
 
-
 ###############################################################
 
-# load("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/Simulations/Results/Final_12_08_24/Model_results/Spec12/scenario_12_output1.RData")
-# check <- model_info_list$i$sim_data_train
-# check_test <- model_info_list$i$sim_data_test
-# 
-# #Example
-# DR_check <- DR_learner(analysis = "mDR-learner",
-#                        data = check,
-#                        id = "ID",
-#                        outcome = "Y",
-#                        exposure = "A",
-#                        outcome_observed_indicator = "G_obs",
-#                        splits = 1,
-#                        e_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        e_method = "Super learner",
-#                        e_SL_lib = c("SL.mean",
-#                                     "SL.lm"),
-#                        out_method = "Super learner",
-#                        out_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        out_SL_lib = c("SL.mean",
-#                                       "SL.lm"),
-#                        g_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        g_method = "Super learner",
-#                        g_SL_lib = c("SL.mean",
-#                                     "SL.lm"),
-#                        imp_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        imp_SL_lib = c("SL.mean",
-#                                       "SL.lm"),
-#                        pse_method = "Random forest",
-#                        pse_covariates = c("X1","X2","X3","X4","X5","X6"),
-#                        pse_SL_lib = c("SL.mean",
-#                                       "SL.lm"),
-#                        newdata = check_test,
-#                        rf_CI = TRUE,
-#                        num_boot = 100)
+load("C:/Users/Matthew/OneDrive - University College London/Documents/Projects/Missing_outcomes/mDR-learner_mEP-learner/data/ACTG175_data.RData")
+
+#--- Formatting variables ---#
+ACTG175_data$treat <- as.numeric(ACTG175_data$treat)
+ACTG175_data$r <- as.numeric(ACTG175_data$r)
+ACTG175_data$cd496 <- as.numeric(ACTG175_data$cd496)
+
+#--- Defining covariates to be input into each model ---#
+out_cov_list <- c("age","wtkg","karnof","cd40","cd80","gender","hemo","homo","symptom","race","drugs","str2")
+imp_cov_list <- c("age","wtkg","karnof","cd40","cd80","gender","hemo","homo","symptom","race","drugs","str2")
+ps_cov_list <- c("age","wtkg","karnof","cd40","cd80","gender","hemo","homo","symptom","race","drugs","str2")
+pse1_cov_list <- c("age")
+pse2_cov_list <- c("age","wtkg","karnof","cd40","cd80","gender","hemo","homo","symptom","race","drugs","str2")
+
+
+#--- Creating learners for SL library's ---#
+#LASSO & elastic net
+nlambda_seq = c(50,100,250)
+alpha_seq <- c(0.5,1)
+usemin_seq <- c(FALSE,TRUE)
+para_learners = create.Learner("SL.glmnet", tune = list(nlambda = nlambda_seq,alpha = alpha_seq,useMin = usemin_seq))
+para_learners
+
+mtry_seq6 <-  floor(sqrt(6) * c(0.5, 1))
+min_node_seq <- c(10,20,50)
+rf_learners6 = create.Learner("SL.ranger", tune = list(mtry = mtry_seq6, min.node.size = min_node_seq))
+rf_learners6
+
+#Nnet (single layer neural nets)
+size_seq <- c(1,2,5)
+nnet_learners <- create.Learner("SL.nnet",tune = list(size = size_seq))
+
+#SVM (Support vector machine)
+nu_seq <- c(1)
+type_seq <- c("C-classification")
+svm_learners = create.Learner("SL.svm",tune = list(type.class = type_seq))
+
+#KernelKnn
+K_seq <- c(5,10,20)
+h_seq <- c(0.01,0.05,0.1,0.25)
+KernelKnn_learners <- create.Learner("SL.kernelKnn",tune = list(k = K_seq, h = h_seq))
+
+#Boosting
+depth_seq <- c(2,4,8)
+shrink_seq <- c(0.05,0.1,0.3)
+minobs_seq <- c(10,20)
+boost_learners = create.Learner("SL.xgboost", tune = list(minobspernode=minobs_seq, max_depth = depth_seq, shrinkage = shrink_seq))
+boost_learners
+
+
+#--- Creating SL libraries ---#
+#Outcome models - Reduced
+out_lib <- c("SL.mean",
+             "SL.lm")#,
+            #  "SL.glmnet_8", "SL.glmnet_9",
+            #  "SL.glmnet_11", "SL.glmnet_12",
+            #  "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+            #  "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+            #  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+            #  "SL.svm_1",
+            #  "SL.kernelKnn_4",
+            #  "SL.kernelKnn_10")
+
+
+#Imputation models - Reduced
+imp_lib <- c("SL.mean",
+             "SL.glm")#,
+            #  "SL.glmnet_8", "SL.glmnet_9",
+            #  "SL.glmnet_11", "SL.glmnet_12",
+            #  "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+            #  "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+            #  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+            #  "SL.svm_1",
+            #  "SL.kernelKnn_4",
+            #  "SL.kernelKnn_10")
+
+
+#Propensity score models reduced
+e_lib <- c("SL.mean",
+           "SL.glm")#,
+          #  "SL.glmnet_8", "SL.glmnet_9",
+          #  "SL.glmnet_11", "SL.glmnet_12",
+          #  "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+          #  "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+          #  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+          #  "SL.svm_1",
+          #  "SL.kernelKnn_4","SL.kernelKnn_10")
+
+
+#Pseudo outcome model - Single covariate - Reduced 
+pse_lib <- c("SL.mean",
+              "SL.lm")#,
+              # "SL.ranger_1","SL.ranger_3","SL.ranger_5",
+              # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+              # "SL.svm_1",
+              # "SL.kernelKnn_4",
+              # "SL.kernelKnn_10")
+
+
+check <- ACTG175_data
+check_test <- ACTG175_data
+
+source("C:/Users/Matthew/OneDrive - University College London/Documents/Projects/Missing_outcomes/mDR-learner_mEP-learner/src/Data_management_1tp.R")
+source("C:/Users/Matthew/OneDrive - University College London/Documents/Projects/Missing_outcomes/mDR-learner_mEP-learner/src/nuisance_models.R")
+source("C:/Users/Matthew/OneDrive - University College London/Documents/Projects/Missing_outcomes/mDR-learner_mEP-learner/src/CI_functions.r")
+
+#Example
+DR_check <- DR_learner(analysis = "mDR-learner",
+                       data = ACTG175_data,
+                       id = "pidnum",
+                       outcome = "cd496",
+                       exposure = "treat",
+                       outcome_observed_indicator = "r",
+                       splits = 1,
+                       e_method = "Super learner",
+                       e_covariates = ps_cov_list,
+                       e_SL_lib = e_lib,
+                       out_method = "Super learner",
+                       out_covariates = out_cov_list,
+                       out_SL_lib = out_lib,
+                       g_method = "Super learner",
+                       g_covariates = imp_cov_list,
+                       g_SL_lib = imp_lib,
+                       imp_covariates = imp_cov_list,
+                       imp_SL_lib = imp_lib,
+                       pse_method = "Parametric",
+                       pse_covariates = pse1_cov_list,
+                       pse_SL_lib = pse_lib,
+                       newdata = ACTG175_data,
+                       CI = TRUE,
+                       num_boot = 100)
 
 # DR_check <- DR_learner(analysis = "Complete case",
 #                        data = check,

@@ -87,7 +87,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
                        sieve_interaction_order=3,
                        imp_covariates = c(),
                        imp_SL_lib,
-                       rf_CI = FALSE,
+                       CI = FALSE,
                        num_boot = 200,
                        newdata
 ){
@@ -451,7 +451,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   #--- Generating CI's ---#
   #-----------------------#
   
-  if (rf_CI == TRUE & pse_method == "Random forest"){
+  if (CI == TRUE & pse_method == "Random forest"){
     pse_n_rows <- nrow(po_data_all)
     for (i in 1:num_boot){
       # Randomly sample half the rows
@@ -606,8 +606,26 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
     LCI <-  pse_model$po_pred$predictions - sqrt(var_list)*S_star
     UCI <-  pse_model$po_pred$predictions + sqrt(var_list)*S_star
   }
-  else if (rf_CI == TRUE & pse_method != "Random forest"){
-    return("Inappropriate pseudo-outcome regression method for obtaining CI's")
+  else if (CI == TRUE & pse_method == "Parametric"){
+    # Extract design matrix from pseudo outcome data
+    X <- as.matrix(cbind(1, po_data_all[, pse_covariates]))
+    y <- po_data_all$pse_Y
+    
+    # Calculate Huber-White sandwich estimator covariance matrix
+    hw_cov_mat <- sandwich_est(X = X, y = y, model = pse_model$po_mod)
+    
+    # Create design matrix for new data predictions
+    newdata_X <- as.matrix(cbind(1, newdata[, pse_covariates]))
+    
+    # Calculate standard errors for predictions
+    SE_list <- get_se(hw_est = hw_cov_mat, pred.grid = newdata_X)
+    
+    # Calculate 95% confidence intervals (1.96 * SE for 95% CI)
+    LCI <- pse_model$po_pred[,1] - 1.96 * SE_list
+    UCI <- pse_model$po_pred[,1] + 1.96 * SE_list
+  }
+  else if (CI == TRUE & pse_method != "Random forest" & pse_method != "Parametric"){
+    stop("Inappropriate pseudo-outcome regression method for obtaining CI's")
   }
 
 
@@ -615,12 +633,12 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
   #--- Returning information ---#
   #-----------------------------#
 
-  if (rf_CI != TRUE){
+  if (CI != TRUE){
     output <- list(CATE_est = pse_model$po_pred,
                    train_data = po_data_all,
                    newdata = newdata)
   }
-  else if (rf_CI == TRUE){
+  else if (CI == TRUE & pse_method == "Random forest"){
     output <- list(CATE_est = pse_model$po_pred,
                    CATE_LCI = LCI,
                    CATE_UCI = UCI,
@@ -633,6 +651,14 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
                    normalized = normalized,
                    colmax_list=colmax_list)
   }
+  else if (CI == TRUE & pse_method == "Parametric"){
+    output <- list(CATE_est = pse_model$po_pred,
+                   CATE_LCI = LCI,
+                   CATE_UCI = UCI,
+                   train_data = po_data_all,
+                   newdata = newdata,
+                   SE_list = SE_list)
+  }
   return(output)
 }
 
@@ -641,10 +667,139 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
 ##############################################################
 
 
-# load("C:/Users/MatthewPryce/OneDrive - London School of Hygiene and Tropical Medicine/Documents/PhD/DR_Missing_Paper/Simulations/Results/First_submission/Model_results/Spec8/scenario_8_output1.RData")
-# check <- model_info_list$i$sim_data_train
-# check_test <- model_info_list$i$sim_data_test
-# 
+load("C:/Users/Matthew/OneDrive - University College London/Documents/Projects/Missing_outcomes/mDR-learner_mEP-learner/data/ACTG175_data.RData")
+
+#--- Formatting variables ---#
+ACTG175_data$treat <- as.numeric(ACTG175_data$treat)
+ACTG175_data$r <- as.numeric(ACTG175_data$r)
+ACTG175_data$cd496 <- as.numeric(ACTG175_data$cd496)
+
+#--- Defining covariates to be input into each model ---#
+out_cov_list <- c("age","wtkg","karnof","cd40","cd80","gender","hemo","homo","symptom","race","drugs","str2")
+imp_cov_list <- c("age","wtkg","karnof","cd40","cd80","gender","hemo","homo","symptom","race","drugs","str2")
+ps_cov_list <- c("age","wtkg","karnof","cd40","cd80","gender","hemo","homo","symptom","race","drugs","str2")
+pse1_cov_list <- c("age")
+pse2_cov_list <- c("age","wtkg","karnof","cd40","cd80","gender","hemo","homo","symptom","race","drugs","str2")
+
+
+#--- Creating learners for SL library's ---#
+#LASSO & elastic net
+nlambda_seq = c(50,100,250)
+alpha_seq <- c(0.5,1)
+usemin_seq <- c(FALSE,TRUE)
+para_learners = create.Learner("SL.glmnet", tune = list(nlambda = nlambda_seq,alpha = alpha_seq,useMin = usemin_seq))
+para_learners
+
+mtry_seq6 <-  floor(sqrt(6) * c(0.5, 1))
+min_node_seq <- c(10,20,50)
+rf_learners6 = create.Learner("SL.ranger", tune = list(mtry = mtry_seq6, min.node.size = min_node_seq))
+rf_learners6
+
+#Nnet (single layer neural nets)
+size_seq <- c(1,2,5)
+nnet_learners <- create.Learner("SL.nnet",tune = list(size = size_seq))
+
+#SVM (Support vector machine)
+nu_seq <- c(1)
+type_seq <- c("C-classification")
+svm_learners = create.Learner("SL.svm",tune = list(type.class = type_seq))
+
+#KernelKnn
+K_seq <- c(5,10,20)
+h_seq <- c(0.01,0.05,0.1,0.25)
+KernelKnn_learners <- create.Learner("SL.kernelKnn",tune = list(k = K_seq, h = h_seq))
+
+#Boosting
+depth_seq <- c(2,4,8)
+shrink_seq <- c(0.05,0.1,0.3)
+minobs_seq <- c(10,20)
+boost_learners = create.Learner("SL.xgboost", tune = list(minobspernode=minobs_seq, max_depth = depth_seq, shrinkage = shrink_seq))
+boost_learners
+
+
+#--- Creating SL libraries ---#
+#Outcome models - Reduced
+out_lib <- c("SL.mean",
+             "SL.lm")#,
+            #  "SL.glmnet_8", "SL.glmnet_9",
+            #  "SL.glmnet_11", "SL.glmnet_12",
+            #  "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+            #  "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+            #  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+            #  "SL.svm_1",
+            #  "SL.kernelKnn_4",
+            #  "SL.kernelKnn_10")
+
+
+#Imputation models - Reduced
+imp_lib <- c("SL.mean",
+             "SL.glm")#,
+            #  "SL.glmnet_8", "SL.glmnet_9",
+            #  "SL.glmnet_11", "SL.glmnet_12",
+            #  "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+            #  "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+            #  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+            #  "SL.svm_1",
+            #  "SL.kernelKnn_4",
+            #  "SL.kernelKnn_10")
+
+
+#Propensity score models reduced
+e_lib <- c("SL.mean",
+           "SL.glm")#,
+          #  "SL.glmnet_8", "SL.glmnet_9",
+          #  "SL.glmnet_11", "SL.glmnet_12",
+          #  "SL.ranger_1","SL.ranger_2","SL.ranger_3",
+          #  "SL.ranger_4","SL.ranger_5","SL.ranger_6",
+          #  "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+          #  "SL.svm_1",
+          #  "SL.kernelKnn_4","SL.kernelKnn_10")
+
+
+#Pseudo outcome model - Single covariate - Reduced 
+pse_lib <- c("SL.mean",
+              "SL.lm")#,
+              # "SL.ranger_1","SL.ranger_3","SL.ranger_5",
+              # "SL.nnet_1","SL.nnet_2","SL.nnet_3",
+              # "SL.svm_1",
+              # "SL.kernelKnn_4",
+              # "SL.kernelKnn_10")
+
+
+check <- ACTG175_data
+check_test <- ACTG175_data
+
+source("C:/Users/Matthew/OneDrive - University College London/Documents/Projects/Missing_outcomes/mDR-learner_mEP-learner/src/Data_management_1tp.R")
+source("C:/Users/Matthew/OneDrive - University College London/Documents/Projects/Missing_outcomes/mDR-learner_mEP-learner/src/nuisance_models.R")
+source("C:/Users/Matthew/OneDrive - University College London/Documents/Projects/Missing_outcomes/mDR-learner_mEP-learner/src/CI_functions.r")
+
+EP_check <- EP_learner(analysis = "SL imputation",
+                       data = ACTG175_data,
+                       id = "pidnum",
+                       outcome = "cd496",
+                       exposure = "treat",
+                       outcome_observed_indicator = "r",
+                       splits = 1,
+                       e_method = "Super learner",
+                       e_covariates = ps_cov_list,
+                       e_SL_lib = e_lib,
+                       out_method = "Super learner",
+                       out_covariates = out_cov_list,
+                       out_SL_lib = out_lib,
+                       g_method = "Super learner",
+                       g_covariates = imp_cov_list,
+                       g_SL_lib = imp_lib,
+                       imp_covariates = imp_cov_list,
+                       imp_SL_lib = imp_lib,
+                       sieve_interaction_order=3,
+                       pse_method = "Parametric",
+                       pse_covariates = pse1_cov_list,
+                       pse_SL_lib = pse_lib,
+                       newdata = ACTG175_data,
+                       CI = TRUE,
+                       num_boot = 100)
+                       
+                       # 
 # #Example
 # EP_check <- EP_learner(analysis = "mEP-learner",
 #                        data = check,
@@ -704,7 +859,7 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
 #                                       # "SL.svm_1",
 #                                       # "SL.kernelKnn_4","SL.kernelKnn_10"),
 #                        newdata = check_test,
-#                        rf_CI = TRUE,
+#                        CI = TRUE,
 #                        num_boot = 10)
 
 
