@@ -606,24 +606,24 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
     LCI <-  pse_model$po_pred$predictions - sqrt(var_list)*S_star
     UCI <-  pse_model$po_pred$predictions + sqrt(var_list)*S_star
   }
-  else if (CI == TRUE & pse_method == "Parametric"){
-    # Extract design matrix from pseudo outcome data
-    X <- as.matrix(cbind(1, po_data_all[, pse_covariates]))
-    y <- po_data_all$pse_Y
+  # else if (CI == TRUE & pse_method == "Parametric"){
+  #   # Extract design matrix from pseudo outcome data
+  #   X <- as.matrix(cbind(1, po_data_all[, pse_covariates]))
+  #   y <- po_data_all$pse_Y
     
-    # Calculate Huber-White sandwich estimator covariance matrix
-    hw_cov_mat <- sandwich_est(X = X, y = y, model = pse_model$po_mod)
+  #   # Calculate Huber-White sandwich estimator covariance matrix
+  #   hw_cov_mat <- sandwich_est(X = X, y = y, model = pse_model$po_mod)
     
-    # Create design matrix for new data predictions
-    newdata_X <- as.matrix(cbind(1, newdata[, pse_covariates]))
+  #   # Create design matrix for new data predictions
+  #   newdata_X <- as.matrix(cbind(1, newdata[, pse_covariates]))
     
-    # Calculate standard errors for predictions
-    SE_list <- get_se(hw_est = hw_cov_mat, pred.grid = newdata_X)
+  #   # Calculate standard errors for predictions
+  #   SE_list <- get_se(hw_est = hw_cov_mat, pred.grid = newdata_X)
     
-    # Calculate 95% confidence intervals (1.96 * SE for 95% CI)
-    LCI <- pse_model$po_pred[,1] - 1.96 * SE_list
-    UCI <- pse_model$po_pred[,1] + 1.96 * SE_list
-  }
+  #   # Calculate 95% confidence intervals (1.96 * SE for 95% CI)
+  #   LCI <- pse_model$po_pred[,1] - 1.96 * SE_list
+  #   UCI <- pse_model$po_pred[,1] + 1.96 * SE_list
+  # }
   else if (CI == TRUE & pse_method != "Random forest" & pse_method != "Parametric"){
     stop("Inappropriate pseudo-outcome regression method for obtaining CI's")
   }
@@ -651,14 +651,14 @@ EP_learner <- function(analysis = c("Complete case","Available case","SL imputat
                    normalized = normalized,
                    colmax_list=colmax_list)
   }
-  else if (CI == TRUE & pse_method == "Parametric"){
-    output <- list(CATE_est = pse_model$po_pred,
-                   CATE_LCI = LCI,
-                   CATE_UCI = UCI,
-                   train_data = po_data_all,
-                   newdata = newdata,
-                   SE_list = SE_list)
-  }
+  # else if (CI == TRUE & pse_method == "Parametric"){
+  #   output <- list(CATE_est = pse_model$po_pred,
+  #                  CATE_LCI = LCI,
+  #                  CATE_UCI = UCI,
+  #                  train_data = po_data_all,
+  #                  newdata = newdata,
+  #                  SE_list = SE_list)
+  # }
   return(output)
 }
 
