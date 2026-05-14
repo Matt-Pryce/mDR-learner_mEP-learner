@@ -17,6 +17,7 @@ library(xgboost)
 library(reshape2)
 library(data.table)
 library(SuperLearner)
+library(hal9001)
 
 
 #######################################
@@ -482,7 +483,19 @@ DR_learner <- function(
       UCI <- pse_model$po_pred[,1] + 1.96 * SE_list
     }
     else if (CI == TRUE & pse_method == "HAL"){
-      #...
+      X <- as.matrix(cbind(1, po_data_all[, pse_covariates]))
+      y <- po_data_all$pse_Y
+      newdata_X <- as.matrix(cbind(1, newdata[, pse_covariates]))
+
+      se_dr <- IC_based_se(X = X,
+                           Y = y,
+                           hal_fit = pse_model$po_mod,
+                           eval_points = newdata_X,
+                           family = "gaussian")
+
+      CATE_est   <- pse_model$po_pred
+      LCI <- CATE_est - 1.96 * se_dr$se
+      UCI <- CATE_est + 1.96 * se_dr$se
     }
     else if (CI == TRUE & (pse_method != "Random forest" | pse_method != "Parametric" | pse_method != "HAL")){ # nolint # nolint # nolint # nolint
       return("Inappropriate pseudo-outcome regression 
@@ -517,6 +530,13 @@ DR_learner <- function(
                      data = po_data_all,
                      SE_list = SE_list,
                      hw_cov_mat = hw_cov_mat)
+    }
+    else if (CI == TRUE & pse_method == "HAL"){
+      output <- list(CATE_est = pse_model$po_pred,
+                     CATE_LCI = LCI,
+                     CATE_UCI = UCI,
+                     data = po_data_all,
+                     se_dr = se_dr)
     }
   }
 
@@ -651,7 +671,7 @@ DR_check <- DR_learner(analysis = "mDR-learner",
                        g_SL_lib = imp_lib,
                        imp_covariates = imp_cov_list,
                        imp_SL_lib = imp_lib,
-                       pse_method = "Parametric",
+                       pse_method = "HAL",
                        pse_covariates = pse1_cov_list,
                        pse_SL_lib = pse_lib,
                        newdata = ACTG175_data,

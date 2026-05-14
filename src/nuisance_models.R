@@ -18,6 +18,7 @@ library(xgboost)
 library(reshape2)
 library(data.table)
 library(SuperLearner)
+library(hal9001)
 library(mice)
 
 
@@ -317,6 +318,27 @@ nuis_mod <- function(model,
         )
       }
     }
+    else if (method == "HAL"){
+      if (model == "Pseudo outcome"){
+        init_mod <- fit_hal(X = as.matrix(subset(train_data, select = covariates)),
+                            Y = train_data$pse_Y,
+                            family = "gaussian",
+                            max_degree = 2,
+                            return_x_basis = TRUE)
+        hal_undersmooth <- undersmooth_hal(X=as.matrix(subset(train_data, select = covariates)),
+                                           Y=train_data$pse_Y,
+                                           fit_init = init_mod,
+                                           family = "gaussian")
+        lambda_u_g <- hal_undersmooth$lambda_under
+
+        mod <- fit_hal(X=as.matrix(subset(train_data, select = covariates)),
+                       Y=train_data$pse_Y,
+                       family = "gaussian",
+                       return_x_basis = TRUE,
+                       fit_control = list(cv_select = FALSE),
+                       lambda = lambda_u_g)
+      }
+    }
   }
 
   
@@ -447,6 +469,10 @@ nuis_mod <- function(model,
    else if (method == "Super learner" | method == "Super learner - Discrete"){
      pred_data <- subset(pred_data, select = c(covariates))
      pred <- predict(mod, pred_data)$pred
+   }
+   else if (method == "HAL"){
+     pred_data <- subset(pred_data, select = c(covariates))
+     pred <- predict(mod, new_data = as.matrix(pred_data))
    }
   }
 
