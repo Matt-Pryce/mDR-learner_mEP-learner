@@ -28,6 +28,120 @@ get_se <- function(hw_est, pred.grid) {
 }
 
 
+
+dr_wboot <- function(X, y, dim, pred.grid, B = 200) {
+  # Algorithm 2 & 6, weighted bootstrap for gDR-Learner
+  # set.seed(88)
+
+  n <- length(y)
+  coef.b <- matrix(0, B, dim + 1)
+  for (b in 1:B) {
+    v <- rexp(n)
+    v <- v / sum(v)
+    coef.b[b, ] <- coef(lm(y ~ X - 1, weights = v))
+  }
+
+  boot.vals <- pred.grid %*% t(coef.b)
+  return(boot.vals)
+}
+
+t_boot_se <- function(
+  df,
+  dim,
+  ipsw1,
+  ipsw0,
+  pred.grid,
+  preds,
+  subgroup = NULL,
+  B = 200
+) {
+  # Algorithm 3 & 5, bootstrap for gT-Learner standard errors
+
+  df$ipsw <- ifelse(df$A == 1, ipsw1, ipsw0)
+  df1 <- df %>% filter(A == 1 & S == 1)
+  df0 <- df %>% filter(A == 0 & S == 1)
+
+  n1 <- nrow(df1)
+  n0 <- nrow(df0)
+
+  coef.b1 <- matrix(0, B, dim + 1)
+  coef.b0 <- matrix(0, B, dim + 1)
+
+  # set.seed(88)
+  for (b in 1:B) {
+    # bootstrap sample indices for each treatment arm, stratified by subgroup
+
+    sample1 <- df1 %>%
+      group_by(across(all_of(subgroup))) %>%
+      slice_sample(prop = 1, replace = TRUE) %>%
+      dplyr::select(-c("A", "S"))
+    sample0 <- df0 %>%
+      group_by(across(all_of(subgroup))) %>%
+      slice_sample(prop = 1, replace = TRUE) %>%
+      dplyr::select(-c("A", "S"))
+
+    X1 <- as.matrix(sample1 %>% dplyr::select(-c("Y", "ipsw")))
+    X0 <- as.matrix(sample0 %>% dplyr::select(-c("Y", "ipsw")))
+
+    # Algorithm 3, line 3 option 1
+    coef.b1[b, ] <- coef(glm(
+      sample1$Y ~ X1 - 1,
+      weights = sample1$ipsw,
+      family = "binomial"
+    ))
+    coef.b0[b, ] <- coef(glm(
+      sample0$Y ~ X0 - 1,
+      weights = sample0$ipsw,
+      family = "binomial"
+    ))
+
+    while (any(is.na(coef.b1[b, ]) | is.na(coef.b0[b, ]))) {
+      # | any(coef.b0[b, ] > 100000) | any(coef.b1[b,] > 100000)
+      # bootstrap sample indices for each treatment arm
+      print(paste("again", b))
+      sample1 <- df1 %>%
+        group_by(across(all_of(subgroup))) %>%
+        sample_n(n1, replace = TRUE) %>%
+        dplyr::select(-c("A", "S"))
+      sample0 <- df0 %>%
+        group_by(across(all_of(subgroup))) %>%
+        sample_n(n0, replace = TRUE) %>%
+        dplyr::select(-c("A", "S"))
+
+      X1 <- as.matrix(sample1 %>% dplyr::select(-c("Y", "ipsw")))
+      X0 <- as.matrix(sample0 %>% dplyr::select(-c("Y", "ipsw")))
+
+      # Algorithm 3, line 3 option 1
+      coef.b1[b, ] <- coef(glm(
+        sample1$Y ~ X1 - 1,
+        weights = sample1$ipsw,
+        family = "binomial"
+      ))
+      coef.b0[b, ] <- coef(glm(
+        sample0$Y ~ X0 - 1,
+        weights = sample0$ipsw,
+        family = "binomial"
+      ))
+
+      print(coef.b1[b, ])
+      print(coef.b0[b, ])
+    }
+  }
+
+  # get fitted values on grid points
+  boot.vals1 <- pred.grid %*% t(coef.b1)
+  boot.vals0 <- pred.grid %*% t(coef.b0)
+
+  boot.vals <- logit2prob(boot.vals1) - logit2prob(boot.vals0)
+
+  # calculate standard errors for each observation over the B bootstrap replicates
+  cate_se <- apply(boot.vals, 1, sd)
+  # print(head(boot.vals1[,94]))
+  # print(head(boot.vals0[,94]))
+  return(list(boot.vals = boot.vals, cate_se = cate_se))
+}
+
+
 undersmooth_hal <- function(
   X,
   Y,

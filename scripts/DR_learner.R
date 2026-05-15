@@ -88,6 +88,7 @@ DR_learner <- function(
   imp_SL_lib,
   CI = FALSE,
   num_boot = 200,
+  Para_CI_sim = FALSE,
   newdata
 ){
   if (analysis == "mDR-learner"){
@@ -464,7 +465,7 @@ DR_learner <- function(
       LCI <-  pse_model$po_pred$predictions - sqrt(var_list)*S_star
       UCI <-  pse_model$po_pred$predictions + sqrt(var_list)*S_star
     }
-    else if (CI == TRUE & pse_method == "Parametric"){
+    else if (CI == TRUE & pse_method == "Parametric" & Para_CI_sim == FALSE){
       # Extract design matrix from pseudo outcome data
       X <- as.matrix(cbind(1, po_data_all[, pse_covariates]))
       y <- po_data_all$pse_Y
@@ -481,6 +482,24 @@ DR_learner <- function(
       # Calculate 95% confidence intervals (1.96 * SE for 95% CI)
       LCI <- pse_model$po_pred[,1] - 1.96 * SE_list
       UCI <- pse_model$po_pred[,1] + 1.96 * SE_list
+    }
+    else if (CI == TRUE & pse_method == "Parametric" & Para_CI_sim == TRUE){
+      # # Extract design matrix from pseudo outcome data
+      # X <- as.matrix(cbind(1, po_data_all[, pse_covariates]))
+      # y <- po_data_all$pse_Y
+      
+      # # Calculate Huber-White sandwich estimator covariance matrix
+      # hw_cov_mat <- sandwich_est(X = X, y = y, model = pse_model$po_mod)
+      
+      # # Create design matrix for new data predictions
+      # newdata_X <- as.matrix(cbind(1, newdata[, pse_covariates]))
+      
+      # # Calculate standard errors for predictions
+      # SE_list <- get_se(hw_est = hw_cov_mat, pred.grid = newdata_X)
+      
+      # # Calculate 95% confidence intervals (1.96 * SE for 95% CI)
+      # LCI <- pse_model$po_pred[,1] - 1.96 * SE_list
+      # UCI <- pse_model$po_pred[,1] + 1.96 * SE_list
     }
     else if (CI == TRUE & pse_method == "HAL"){
       X <- as.matrix(cbind(1, po_data_all[, pse_covariates]))
