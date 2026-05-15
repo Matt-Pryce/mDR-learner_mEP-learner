@@ -421,3 +421,39 @@ cal_IC_for_beta <- function(
   }
   return(IC)
 }
+
+
+dr_wboot <- function(X, y, dim, pred.grid, B = 200) {
+  # Algorithm 2 & 6, weighted bootstrap for gDR-Learner
+  # set.seed(88)
+
+  n <- length(y)
+  coef.b <- matrix(0, B, dim + 1)
+  for (b in 1:B) {
+    v <- rexp(n)
+    v <- v / sum(v)
+    coef.b[b, ] <- coef(lm(y ~ X - 1, weights = v))
+  }
+
+  boot.vals <- pred.grid %*% t(coef.b)
+  return(boot.vals)
+}
+
+max_tstat <- function(boot.vals, cate.vals, se, max = TRUE) {
+  # calculate maximum t-statistic for each individual across bootstrap replicates
+  tstat <- (boot.vals - cate.vals) / se
+
+  maxtstat <- apply(abs(tstat), 2, max)
+
+  if (max == FALSE) {
+    return(tstat)
+  }
+
+  return(maxtstat)
+}
+
+get_quantile <- function(tstats, alpha) {
+  # return quantile at the alpha level
+  t_quants <- quantile(tstats, alpha, names = FALSE)
+  return(t_quants)
+}
